@@ -1,14 +1,14 @@
 import json 
 
 class DSRNode:
-    def __init__(self, node_id, lora):
+    def __init__(self, node_id, lora, qos = -80):
         self.node_id = node_id
         self.neighbors = set()  # Vecinos directos
+        self.quality_neighbor = qos
         self.routing_table = {}  # Tabla de rutas: destino -> lista de saltos
         self.rreq_id = 0  # ID único para cada RREQ
         self.pending_rreqs = {}  # Solicitudes RREQ pendientes (ID -> destino)
         self.lora = lora  # Instancia de la clase LoRa
-        self.send_hello()
 
     def send_hello(self):
         """Envía un mensaje de hello para descubrir vecinos"""
@@ -31,8 +31,8 @@ class DSRNode:
         print(f"{self.node_id} enviando RREP a {source}: {message}")
         self.lora.send(message)
 
-    def send_data(self, data, destination):
-        """Envía datos utilizando una ruta completa ya descubierta"""
+    """def send_data(self, data, destination):
+        ""Envía datos utilizando una ruta completa ya descubierta""
         route = self.routing_table.get(destination)
         if route:
             print(f"{self.node_id} enviando datos a {destination} vía {route}")
@@ -45,33 +45,43 @@ class DSRNode:
         else:
             print(f"Ruta a {destination} no encontrada, enviando RREQ...")
             self.broadcast_rreq(destination)
-
+    """
     def receive_message(self):
         """Escucha la red y procesa los mensajes recibidos"""
         if self.lora.is_packet_received():
-            message = self.lora.get_packet()
+            message = self.lora.get_packet(rssi=True)
             print(f"{self.node_id} recibió mensaje: {message}")
-
-            if message.startswith("HELLO"):
+            if message.get('payload').startswith("HELLO"):
                 self.process_hello(message)
+            """
             elif message.startswith("RREQ"):
                 self.process_rreq(message)
             elif message.startswith("RREP"):
                 self.process_rrep(message)
             elif message.startswith("DATA"):
                 self.forward_data(message)
+            
             else:
                 print("Mensaje sin reconocer")
-
+            """
     def process_hello(self, message):
         """Procesa un mensaje HELLO recibido y agrega al nodo a la lista de vecinos"""
-        _, neighbor_id = message.split(":")
-        if neighbor_id != self.node_id:  # Evita agregar a sí mismo
-            self.neighbors.add(neighbor_id)
-            print(f"{self.node_id} descubrió al vecino {neighbor_id}")
+        try:
+            _, neighbor_id = message.get("payload").split(":")
+            if neighbor_id != self.node_id and int(message.get("rssi")) > self.quality_neighbor:
+                if not neighbor_id in self.neighbors:
+                    self.neighbors.add(neighbor_id)
+                    print(f"{self.node_id} descubrió al vecino {neighbor_id}")
+                else:
+                    pass
+        except:
+            pass
+            # Evita agregar a sí mismo
+            
 
+    """
     def process_rreq(self, message):
-        """Procesa un mensaje RREQ recibido"""
+        ""Procesa un mensaje RREQ recibido""
         _, source, destination, rreq_id = message.split(":")
         if destination == self.node_id:
             # Este nodo es el destino, enviar RREP
@@ -84,7 +94,7 @@ class DSRNode:
             self.lora.send(message)
 
     def process_rrep(self, message):
-        """Procesa un mensaje RREP recibido"""
+        ""Procesa un mensaje RREP recibido""
         _, destination, source, rrep_id, *route = message.split(":")
         
         # Agregar este nodo a la ruta
@@ -101,8 +111,9 @@ class DSRNode:
             print(f"{self.node_id} reenvía RREP: {new_message}")
             self.lora.send(new_message)
 
+    
     def forward_data(self, message):
-        """Reenvía el mensaje de datos hacia el destino utilizando la ruta completa"""
+        ""Reenvía el mensaje de datos hacia el destino utilizando la ruta completa""
         _, source, destination, data, *route = message.split(":")
         
         if destination == self.node_id:
@@ -121,3 +132,4 @@ class DSRNode:
                 self.lora.send(new_message)
             else:
                 print(f"Error: No se puede reenviar, la ruta está vacía")
+    """
