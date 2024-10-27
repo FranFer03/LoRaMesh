@@ -1,7 +1,5 @@
-import json 
-
 class DSRNode:
-    def __init__(self, node_id, lora, qos = -80):
+    def __init__(self, node_id, lora, qos = -80,timestamp=20):
         self.node_id = node_id
         self.neighbors = set()  # Vecinos directos
         self.quality_neighbor = qos
@@ -9,6 +7,10 @@ class DSRNode:
         self.rreq_id = 0  # ID único para cada RREQ
         self.pending_rreqs = {}  # Solicitudes RREQ pendientes (ID -> destino)
         self.lora = lora  # Instancia de la clase LoRa
+        self.timestamp_message = timestamp
+
+    def set_timestamp(self,seconds):
+        self.timestamp_message = seconds
 
     def send_hello(self):
         """Envía un mensaje de hello para descubrir vecinos"""
@@ -18,7 +20,7 @@ class DSRNode:
     
     def broadcast_rreq(self, destination):
         """Envía un mensaje RREQ a la red para descubrir rutas"""
-        self.rreq_id += 1
+        self.rreq_id = self.timestamp_message
         rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}"
         print(f"{self.node_id} enviando RREQ: {rreq_message}")
         # Envía en broadcast a todos los vecinos usando LoRa
@@ -64,6 +66,7 @@ class DSRNode:
             else:
                 print("Mensaje sin reconocer")
             """
+    
     def process_hello(self, message):
         """Procesa un mensaje HELLO recibido y agrega al nodo a la lista de vecinos"""
         try:
@@ -82,36 +85,43 @@ class DSRNode:
     
     def process_rreq(self, message):
         """Procesa un mensaje RREQ recibido"""
-        _, source, destination, rreq_id = message.split(":")
-        if destination == self.node_id:
-            # Este nodo es el destino, enviar RREP
-            print(f"{self.node_id} es el destino, enviando RREP a {source}")
-            rrep_message = f"RREP:{self.node_id}:{source}:{rreq_id}"
-            self.send_rrep(source, rrep_message)
-        else:
-            # Nodo intermedio, reenviar RREQ
-            print(f"{self.node_id} reenvía RREQ: {message}")
-            self.lora.send(message)
+        try:
+            _, source, destination, rreq_id = message.split(":")
+            if destination == self.node_id:
+                # Este nodo es el destino, enviar RREP
+                print(f"{self.node_id} es el destino, enviando RREP a {source}")
+                rrep_message = f"RREP:{self.node_id}:{source}:{rreq_id}"
+                self.send_rrep(source, rrep_message)
+            else:
+                # Nodo intermedio, reenviar RREQ
+                print(f"{self.node_id} reenvía RREQ: {message}")
+                self.lora.send(message)
+        except:
+            pass
     
     def process_rrep(self, message):
-        """Procesa un mensaje RREP recibido"""
-        _, destination, source, rrep_id, *route = message.split(":")
-        
-        # Agregar este nodo a la ruta
-        route.append(self.node_id)
-        
-        if destination == self.node_id:
-            # Este nodo es el origen, almacena la ruta completa en la tabla de rutas
-            complete_route = route[::-1]  # La revertimos para que sea origen -> destino
-            print(f"{self.node_id} almacena la ruta hacia {source}: {complete_route}")
-            self.routing_table[source] = complete_route
-        
-        else:
-            # Nodo intermedio, reenviar RREP agregando este nodo a la ruta
-            #new_message = f"RREP:{destination}:{source}:{rrep_id}:{':'.join(route)}"
-            #print(f"{self.node_id} reenvía RREP: {new_message}")
-            #self.lora.send(new_message)
+        try:
+            """Procesa un mensaje RREP recibido"""
+            _, destination, source, rrep_id, *route = message.split(":")
+            
+            # Agregar este nodo a la ruta
+            route.append(self.node_id)
+            
+            if destination == self.node_id:
+                # Este nodo es el origen, almacena la ruta completa en la tabla de rutas
+                complete_route = route[::-1]  # La revertimos para que sea origen -> destino
+                print(f"{self.node_id} almacena la ruta hacia {source}: {complete_route}")
+                self.routing_table[source] = complete_route
+            
+            else:
+                # Nodo intermedio, reenviar RREP agregando este nodo a la ruta
+                #new_message = f"RREP:{destination}:{source}:{rrep_id}:{':'.join(route)}"
+                #print(f"{self.node_id} reenvía RREP: {new_message}")
+                #self.lora.send(new_message)
+                pass
+        except:
             pass
+
     """
     def forward_data(self, message):
         ""Reenvía el mensaje de datos hacia el destino utilizando la ruta completa""
