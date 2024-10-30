@@ -1,5 +1,3 @@
-
-
 class DSRNode:
     MAX_ATTEMPTS = 4
     RETRY_INTERVAL = 5
