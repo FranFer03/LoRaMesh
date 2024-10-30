@@ -1,22 +1,36 @@
-import time
+
 
 class DSRNode:
-    MAX_ATTEMPTS = 4          # Máximo de intentos de reenvío (20 segundos / 5 segundos)
-    RETRY_INTERVAL = 5         # Intervalo de reintento en segundos
-    TIMEOUT = 20               # Tiempo máximo de espera en segundos
-
-    def __init__(self, node_id, lora, qos=-80, timestamp=20):
+    MAX_ATTEMPTS = 4
+    RETRY_INTERVAL = 5
+    TIMEOUT = 20   
+    def __init__(self, node_id, lora,timer, qos=-80, timestamp=20):
+        self.neighbors = set()
+        self.rreq_id = 0
+        self.pending_rreqs = {}
+        self.routes = []
         self.node_id = node_id
-        self.neighbors = set()  # Vecinos directos
         self.quality_neighbor = qos
-        self.routing_table = {}  # Tabla de rutas: destino -> lista de saltos
-        self.rreq_id = 0  # ID único para cada RREQ
-        self.pending_rreqs = {}  # Solicitudes RREQ pendientes (ID -> destino)
-        self.lora = lora  # Instancia de la clase LoRa
-        self.timestamp_message = timestamp
+        self.lora = lora 
+        self.timestamp_message = timestamp        
         self.start_time = None
-        self.rreq_attempts = 0  # Conteo de reintentos de RREQ
-        self.echo = False
+        self.timer = timer
+        self.time_pending_rreqs = 0
+
+        self.timer.init(mode=self.timer.ONE_SHOT, period=1, callback=self.set_times)
+    
+    @property
+    def get_neighbors(self):
+        return print(f"Vecinos proximos: {self.neighbors}")
+    
+    @property
+    def get_routes(self):
+        return print(f"Rutas disponibles: {self.routes}")
+
+    def set_times(self):
+        self.time_pending_rreqs += 1
+        if self.time_pending_rreqs // 60:
+            pass
 
     def set_timestamp(self, seconds):
         self.timestamp_message = seconds
@@ -26,40 +40,19 @@ class DSRNode:
         hello_message = f"HELLO:{self.node_id}"
         print(f"{self.node_id} enviando mensaje HELLO")
         self.lora.send(hello_message)
-    
+
     def broadcast_rreq(self, destination):
         """Envía un mensaje RREQ a la red para descubrir rutas, con reintentos y control de expiración."""
-        self.rreq_id = self.timestamp_message  # Genera un nuevo ID de RREQ
-        self.pending_rreqs[self.rreq_id] = destination
-        self.start_time = time.time()  # Marca el tiempo de inicio
-        self._attempt_rreq(destination)
+        self.rreq_id = self.timestamp_message
+        rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}"
+        self.pending_rreqs[self.rreq_id] = ["RREQ",self.node_id,destination]
+        self.lora.send(rreq_message)
 
-    def _attempt_rreq(self, destination):
-        """Envía el RREQ y controla el reintento si no hay respuesta en 5 segundos."""
-        elapsed_time = time.time() - self.start_time
-        self.receive_message()
-        if elapsed_time >= self.TIMEOUT:
-            print(f"{self.node_id}: Tiempo de espera agotado para el nodo {destination}. No se encontró ruta.")
-            self.pending_rreqs.pop(self.rreq_id, None)  # Elimina la solicitud pendiente
-            return
-
-        if self.rreq_attempts < self.MAX_ATTEMPTS:
-            # Incrementa el contador de intentos y envía el RREQ
-            self.rreq_attempts = self.timestamp_message
-            rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}"
-            self.lora.send(rreq_message)
-            print(f"{self.node_id} reenvía RREQ intento {self.rreq_attempts} hacia {destination}")
-            
-            # Espera RETRY_INTERVAL y vuelve a intentar si no hay respuesta
-            time.sleep(self.RETRY_INTERVAL)
-            self._attempt_rreq(destination)
-        else:
-            print(f"{self.node_id}: Se agotaron los intentos para el nodo {destination}.")
-
-    def send_rrep(self, source, message):
+    def send_rrep(self, source,id_message):
         """Envía un RREP al nodo origen por la ruta inversa"""
-        print(f"{self.node_id} enviando RREP a {source}: {message}")
-        self.lora.send(message)
+        print(f"{self.node_id} enviando RREP a {source}: {id_message}")
+        rrep_message = f"RREP:{self.node_id}:{source}:{id_message}"
+        self.lora.send(rrep_message)
 
     def receive_message(self):
         """Escucha la red y procesa los mensajes recibidos"""
@@ -89,39 +82,30 @@ class DSRNode:
         try:
             _, source, destination, rreq_id = message.split(":")
             if destination == self.node_id:
-                # Este nodo es el destino, enviar RREP
-                print(f"{self.node_id} es el destino, enviando RREP a {source}")
-                rrep_message = f"RREP:{self.node_id}:{source}:{rreq_id}"
-                self.send_rrep(source, rrep_message)
+                if rreq_id in self.pending_rreqs.keys:
+                    print(f"{self.node_id} es el destino, enviando RREP a {source}")
+                    self.pending_rreqs[self.rreq_id] = ["RREQ",self.node_id,destination]
+                    self.send_rrep(source,rreq_id)
             else:
                 # Nodo intermedio, reenviar RREQ
-                print(f"{self.node_id} reenvía RREQ: {message}")
-                self.lora.send(message)
+                if not rreq_id in self.pending_rreqs.keys :
+                    print(f"{self.node_id} reenvía RREQ: {message}")
+                    self.pending_rreqs(rreq_id) = ["RREQ",source]
+                    self.lora.send(message)
+                else:
+                    print("Mensaje ya reenviado")
         except Exception as e:
             print(f"Error procesando RREQ: {e}")
     
     def process_rrep(self, message):
-        """Procesa un mensaje RREP recibido"""
+        """Procesa un mensaje RREP recibido RREP:{self.node_id}:{source}:{id_message}"""
         try:
-            _, destination, source, rrep_id, *route = message.split(":")
-            
-            # Agregar este nodo a la ruta
-            route.append(self.node_id)
+            _, source, destination, rrep_id = message.split(":")
             
             if destination == self.node_id:
-                # Este nodo es el origen, almacena la ruta completa en la tabla de rutas
-                complete_route = route[::-1]  # La revertimos para que sea origen -> destino
-                print(f"{self.node_id} almacena la ruta hacia {source}: {complete_route}")
-                self.routing_table[source] = complete_route
-                self.pending_rreqs.pop(int(rrep_id), None)  # Limpiar solicitud de RREQ
+                self.pending_rreqs.pop(int(rrep_id), None)
                 self.echo = False
-                self.rreq_attempts = 0  # Reinicia intentos
-            else:
-                # Nodo intermedio, reenviar RREP agregando este nodo a la ruta
-                #route.append(self.node_id)
-                #new_message = f"RREP:{destination}:{source}:{rrep_id}:{':'.join(route)}"
-                #print(f"{self.node_id} reenvía RREP: {new_message}")
-                #self.lora.send(new_message)
+                self.rreq_attempts = 0
                 pass
         except Exception as e:
             print(f"Error procesando RREP: {e}")
