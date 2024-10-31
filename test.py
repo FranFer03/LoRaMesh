@@ -1,8 +1,14 @@
-node_id = 1
-rreq_id = 2
-destination = 3
+message = "RREQ:A:E:10:A-B-F"
+seccuence, source, destination, rreq_id, *route = message.split(":")
+routelist = route[0].split("-")
 
-rreq_message = f"RREQ:{node_id}:{destination}:{rreq_id}"
-_, source, destination, rreq_id = rreq_message.split(":")
+# Agregar "C" a routelist si no está ya en la lista
+if "C" not in routelist:
+    routelist.append("C")
+    print(routelist)
 
-print(_,source,destination,rreq_id)
+routelist.reverse()
+
+# Crear el mensaje final uniendo los elementos de routelist
+finalmessage = f"{seccuence}:{source}:{destination}:{rreq_id}:{'-'.join(routelist)}"
+print(finalmessage)
