@@ -4,15 +4,16 @@ class DSRNode:
     MAX_ATTEMPTS = 4
     RETRY_INTERVAL = 5
     TIMEOUT = 20
-    CACHE_PENDING = 200   
+    CACHE_TIMEOUT = 60   
 
     def __init__(self, node_id, lora,timer, qos=-80, timestamp=20):
         self.neighbors = set()
         self.rreq_id = 0
         self.query = {
-            "RREQ":[]
+            "RREQ":[],
+            "RREP":[]
         }
-        self.routes = []
+        self.routes = {}
         self.node_id = node_id
         self.quality_neighbor = qos
         self.lora = lora 
@@ -31,9 +32,13 @@ class DSRNode:
     def get_routes(self):
         return print(f"Rutas disponibles: {self.routes}")
 
-    def set_times(self):
-        if self.pending_rreqs == self.CACHE_PENDING:
-            self.pending_rreqs.pop(0)
+    def cache_cleaning(self):
+        for z, i in enumerate(self.query["RREQ"][:]):
+            if self.timestamp_message - int(i[0]) >= self.CACHE_TIMEOUT:
+                self.query["RREQ"].remove(i)
+        for z, i in enumerate(self.query["RREP"][:]):
+            if self.timestamp_message - int(i[0]) >= self.CACHE_TIMEOUT:
+                self.query["RREP"].remove(i)
 
     def set_timestamp(self, seconds):
         self.timestamp_message = seconds
@@ -57,10 +62,11 @@ class DSRNode:
         self.query["RREQ"] = [str(self.rreq_id),self.node_id,destination]
         self.lora.send(rreq_message)
 
-    def send_rrep(self, source,id_message):
+    def send_rrep(self, destination,id_message,routes):
         """Envía un RREP al nodo origen por la ruta inversa"""
-        print(f"{self.node_id} enviando RREP a {source}: {id_message}")
-        rrep_message = f"RREP:{self.node_id}:{source}:{id_message}"
+        print(f"{self.node_id} envia RREP a {destination}: {id_message}: {'-'.join(routes)}")
+        rrep_message = f"RREP:{self.node_id}:{destination}:{id_message}:{'-'.join(routes)}"
+        self.query["RREP"].append([id_message, self.node_id, destination])
         self.lora.send(rrep_message)
 
     def receive_message(self):
@@ -98,7 +104,7 @@ class DSRNode:
                 print(f"Ahh...soy yo wey {self.node_id} es el destino, enviando RREP a {source}")
                 routelist.reverse()
                 self.query["RREQ"].append([rreq_id, source, destination])
-                self.send_rrep(source, rreq_id)
+                self.send_rrep(source, rreq_id,routelist)
             
             else:
                 # Nodo intermedio, reenviar RREQ si no fue procesado ya
@@ -116,15 +122,26 @@ class DSRNode:
 
     
     def process_rrep(self, message):
-        """Procesa un mensaje RREP recibido RREP:{self.node_id}:{source}:{id_message}"""
+        """Procesa un mensaje RREP recibido """
         try:
-            _, source, destination, rrep_id = message.split(":")
-            
+            sequence, source, destination, rrep_id, *route = message.split(":")
+            routelist = route[0].split("-")
+
             if destination == self.node_id:
-                self.pending_rreqs.pop(int(rrep_id), None)
-                self.echo = False
-                self.rreq_attempts = 0
-                pass
+                routelist.reverse()
+                print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
+                self.routes[source] = routelist
+            else:
+                # Nodo intermedio, reenviar RREP si no fue procesado ya
+                if self.node_id in routelist:
+                    if not [rrep_id, source, destination] in self.query["RREP"]:
+                        print(f"Nodo de camino inverso: {self.node_id} reenvía RREP: {message}")
+                        self.query["RREP"].append([rrep_id, source, destination])
+                        self.lora.send(message)
+                    else:
+                        print("Mensaje ya reenviado")
+                else:
+                    pass
         except Exception as e:
             print(f"Error procesando RREP: {e}")
     
