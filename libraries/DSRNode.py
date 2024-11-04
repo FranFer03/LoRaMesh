@@ -21,8 +21,9 @@ class DSRNode:
         self.start_time = None
         self.timer = timer
         self.time_pending_rreqs = []
+        """hacer que busque nodos perdiodicamente aca o en main"""
 
-        self.timer.init(mode=self.timer.ONE_SHOT, period=1, callback=self.set_times)
+        self.timer.init(mode=self.timer.PERIODIC, period=1, callback=self.set_times)
     
     @property
     def get_neighbors(self):
@@ -32,9 +33,25 @@ class DSRNode:
     def get_routes(self):
         return print(f"Rutas disponibles: {self.routes}")
 
+    def remove_query(self, command, element):
+        try:
+            # Filtramos sublistas que contengan el elemento y las eliminamos
+            initial_len = len(self.query[command])
+            self.query[command] = [sublist for sublist in self.query[command] if element not in sublist]
+            
+            # Verificar si se eliminó alguna sublista
+            if len(self.query[command]) < initial_len:
+                print(f"Elemento '{element}' eliminado exitosamente del comando '{command}'.")
+            else:
+                print(f"No se encuentra el query con el elemento '{element}'.")
+                
+        except KeyError:
+            print(f"No existe el comando '{command}' en el diccionario.")
+    
     def cache_cleaning(self):
         for z, i in enumerate(self.query["RREQ"][:]):
             if self.timestamp_message - int(i[0]) >= self.CACHE_TIMEOUT:
+                print(f"No se encuentra el nodo {i[2]} por lo tanto se ha eliminado de la query el ID {i[0]}")             
                 self.query["RREQ"].remove(i)
         for z, i in enumerate(self.query["RREP"][:]):
             if self.timestamp_message - int(i[0]) >= self.CACHE_TIMEOUT:
@@ -77,7 +94,7 @@ class DSRNode:
             if message.get('payload').startswith("HELLO"):
                 self.process_hello(message)
             elif message.get('payload').startswith("RREQ"):
-                self.process_rreq(message.get('payload'))
+                self.process_rreq(message)
             elif message.get('payload').startswith("RREP"):
                 self.process_rrep(message.get('payload'))
             elif message.get('payload').startswith("DATA"):
@@ -96,8 +113,9 @@ class DSRNode:
     
     def process_rreq(self, message):
         """Procesa un mensaje RREQ recibido """
+        """ AGREGAR LOGICA PARA QUE SOLAMENTE REENVIE EL RREQ SI EL MENSAJE ES REBICIDO DESDE UN VECINO"""
         try:
-            sequence, source, destination, rreq_id, *route = message.split(":")
+            sequence, source, destination, rreq_id, *route = message.get('payload').split(":")
             routelist = route[0].split("-")
 
             if destination == self.node_id:
@@ -131,6 +149,8 @@ class DSRNode:
                 routelist.reverse()
                 print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
                 self.routes[source] = routelist
+                self.remove_query("RREQ",rrep_id)
+
             else:
                 # Nodo intermedio, reenviar RREP si no fue procesado ya
                 if self.node_id in routelist:
