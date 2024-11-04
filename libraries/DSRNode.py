@@ -276,9 +276,9 @@ class DSRNode:
                 # Nodo intermedio, reenviar DATA si no fue procesado ya
                 if self.node_id in routelist:
                     if not [data_id, source, destination] in self.query["DATA"]:
-                        print(f"Nodo de transicion: {self.node_id} reenvía DATA: {message.get("payload")}")
+                        print(f"Nodo de transicion: {self.node_id} reenvía DATA: {message.get('payload')}")
                         self.query["DATA"].append([data_id, source, destination])
-                        self.lora.send(message.get("payload"))
+                        self.lora.send(message.get('payload'))
                     else:
                         print("Mensaje ya reenviado")
                 else:
