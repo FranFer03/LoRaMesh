@@ -1,5 +1,5 @@
 import time
-from machine import SPI, Pin
+from machine import SoftSPI, Pin
 
 class LoRa:
     def __init__(self, spi, cs_pin, reset_pin, dio0_pin):
@@ -70,11 +70,17 @@ class LoRa:
         self.init_lora()
 
     def init_lora(self):    
+        init_try = True
+        re_try = 0
         self.cs.value(1)
         self.reset_lora()
-        while self.read_register(self.REG_VERSION) != 0x12:
-            time.sleep(0.1)
-        print("Lora Conectado")
+        while init_try and re_try < 5:
+            version = self.read_register(self.REG_VERSION)
+            re_try = re_try + 1
+            if version != 0:
+                init_try = False
+        if version != 0x12:
+            raise Exception('Invalid version.') 
         self.set_mode_sleep()
         self.set_frequency(915E6)
         self.set_bandwidth(125000)
@@ -88,7 +94,7 @@ class LoRa:
         self.set_mode_standby()
         self.set_mode_rx_continuous()
         self.write_register(self.REG_DIO_MAPPING_1, 0x00)
-        print("Configuracion Finalizada")
+        print("Lora Conectado")
     
     def send(self, data):
         self.set_mode_standby()
@@ -205,7 +211,7 @@ class LoRa:
         time.sleep(0.01)
         self.reset_pin.value(1)
         time.sleep(0.01)
-        
+ 
     # Método para verificar si llegó un paquete
     def is_packet_received(self):
         return self.packet_received
