@@ -1,21 +1,22 @@
 import time
 from machine import Timer
-
+import random
 class DSRNode:
     MAX_ATTEMPTS = 2
     RETRY_INTERVAL = 5
     TIMEOUT = 20
     CACHE_TIMEOUT = 60   
 
-    def __init__(self, node_id, lora, rtc, timer, qos=-80):
+    def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
         self.neighbors = set()
         self.rreq_id = 0
         self.query = {
             "RREQ": [],
             "RREP": [],
-            "DATA": []
+            "DATA": [],
+            "RESP": []
         }
-        self.waiting_ack = False
+        self.waiting_response = False
         self.routes = {}
         self.node_id = node_id
         self.quality_neighbor = qos
@@ -26,7 +27,16 @@ class DSRNode:
         self.timer = timer
         self.time_pending_rreqs = []
         self.current_time = None
+        self.role = role  # Define el rol del nodo como "master" o "slave"
         self.timer.init(period=1000, mode=Timer.PERIODIC, callback=self.set_timestamp)
+        if self.role == "master":
+            print(f"Node {self.node_id} is operating as master.")
+            # Lógica específica para el rol de maestro
+            # ...
+        elif self.role == "slave":
+            print(f"Node {self.node_id} is operating as slave.")
+            # Lógica específica para el rol de esclavo
+            # ...
 
     def set_timestamp(self, timer):
         # Obtener la fecha y hora actual del RTC
@@ -70,6 +80,33 @@ class DSRNode:
             if self.timestamp_message - int(i[0]) >= self.CACHE_TIMEOUT:
                 self.query["RREP"].remove(i)
 
+    def calculate_checksum(self,message):
+        # Convertimos el mensaje en bytes
+        message_bytes = message.encode('utf-8')
+        
+        # Inicializamos la suma
+        checksum = 0
+        
+        # Procesamos el mensaje en bloques de 16 bits (2 bytes)
+        for i in range(0, len(message_bytes), 2):
+            # Tomamos cada par de bytes
+            word = message_bytes[i]
+            
+            # Si hay un segundo byte en el par, lo agregamos
+            if i + 1 < len(message_bytes):
+                word = (word << 8) + message_bytes[i + 1]
+            
+            # Sumamos al checksum
+            checksum += word
+            
+            # Verificamos si hay un acarreo y lo sumamos
+            checksum = (checksum & 0xFFFF) + (checksum >> 16)
+        
+        # Tomamos el complemento de uno
+        checksum = ~checksum & 0xFFFF
+        
+        return checksum
+
     def send_hello(self):
         """Envía un mensaje de hello para descubrir vecinos"""
         self.neighbors = set()
@@ -77,11 +114,16 @@ class DSRNode:
         print(f"{self.node_id} enviando mensaje HELLO")
         self.lora.send(hello_message)
     
-    def send_ack(self,source,id_req):
-        #Agregar logica para reenviar mensaje
-        ack_message = f"ACK:{self.node_id}:{source}:{id_req}"
-        print(f"{self.node_id} envio ACK para {source} por request {id_req}")
-        self.lora.send(ack_message)
+    def send_response(self,destination,id_response, routelist):
+        """Responde a la solicitud de datos al nodo origen"""
+        temp = random.uniform(50,100)
+        humidity = random.uniform(0,100)
+        data_message_raw = f"RESP:{self.node_id}:{destination}:{id_response}:{routelist}:{temp},{humidity}"
+        checksum = self.calculate_checksum(data_message_raw)
+        data_message = f"{data_message_raw}:{checksum}"
+        self.lora.send(data_message)
+
+        #AGREGAR WAITING FOR RESPONSE Y TERMINAR LOGICA DE UDP
 
     def broadcast_rreq(self, destination):
         """Envía un mensaje RREQ a la red para descubrir rutas, con reintentos y control de expiración."""
@@ -98,13 +140,10 @@ class DSRNode:
         self.query["RREP"].append([id_message, self.node_id, destination])
         self.lora.send(rrep_message)
 
-    def send_data(self, destination):
-        """
-        Envía un mensaje de datos a un nodo destino a través de la ruta especificada.
-        Si no hay ruta disponible, envía un mensaje de solicitud de ruta (RREQ).
-        """
+    def request_data(self, destination):
+        """Envía una peticion de datos al nodo destino"""
         if destination in self.routes.keys():
-            print(f"{self.node_id} enviando DATA a {destination} a través de la ruta {self.routes[destination]}")
+            print(f"{self.node_id} enviando solicitud de datos a {destination} a través de la ruta {self.routes[destination]}")
             data_message = f"DATA:{self.node_id}:{destination}:{self.timestamp_message}:{'-'.join(self.routes[destination])}"
             
             # Registrar el mensaje en la consulta
@@ -112,20 +151,18 @@ class DSRNode:
             
             # Enviar mensaje de datos a través de LoRa
             self.lora.send(data_message)
-            self.waiting_ack = True
-            self.waiting_for_ack(destination, data_message)
+            self.waiting_response = True
+            self.waiting_for_response(destination, data_message)
         else:
             print(f"{self.node_id} no se puede enviar DATA a {destination} porque no hay ruta disponible.")
             
             # Enviar un mensaje de solicitud de ruta (RREQ)
             self.broadcast_rreq(destination)
 
-    def waiting_for_ack(self, objetive, message):
-        """
-        Espera el ACK (reconocimiento) de un mensaje enviado y reenvía si no lo recibe en el tiempo esperado.
-        """
+    def waiting_for_response(self, objetive, message):
+        """Espera el ACK (reconocimiento) de un mensaje enviado y reenvía si no lo recibe en el tiempo esperado."""
         attempts = 1
-        while self.waiting_ack:
+        while self.waiting_response:
             if self.timestamp_message - int(self.query["DATA"][0][0]) <= 30 and attempts <= self.MAX_ATTEMPTS:
                 
                 # Reenvío del mensaje después de 15 segundos
@@ -142,12 +179,12 @@ class DSRNode:
                         sequence, source, destination, data_id, routelist = self.extract_message_data(message)
                         if destination == self.node_id and data_id == self.query["DATA"][0][0]:
                             print(f"{self.node_id} recibió ACK para la petición {data_id}")
-                            self.waiting_ack = False
+                            self.waiting_response = False
             else:
                 # Si no se recibe ACK, la ruta se considera caída
                 print(f"{self.node_id} no recibió ACK para la petición {self.query['DATA'][0][0]} por lo tanto la ruta está caída")
                 self.routes.pop(objetive)
-                self.waiting_ack = False
+                self.waiting_response = False
 
     def receive_message(self):
         """
@@ -165,7 +202,7 @@ class DSRNode:
             elif message.get('payload').startswith("RREP"):
                 self.process_rrep(message.get('payload'))
             elif message.get('payload').startswith("DATA"):
-                self.forward_data(message)
+                self.process_data(message)
 
     def process_hello(self, message):
         """Procesa un mensaje HELLO recibido y agrega al nodo a la lista de vecinos"""
@@ -260,17 +297,15 @@ class DSRNode:
         except Exception as e:
             print(f"Error procesando RREP: {e}")
     
-    def forward_data(self, message):
+    def process_data(self, message):
         """Procesa un mensaje DATA recibido """
         try:
             sequence, source, destination, data_id, routelist = self.extract_message_data(message)
 
             if destination == self.node_id:
-                #Completar envio de ACK
                 routelist.reverse()
-                print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
                 self.routes[source] = routelist
-                self.send_ack()
+                self.send_response(source, data_id, routelist)
 
             else:
                 # Nodo intermedio, reenviar DATA si no fue procesado ya
