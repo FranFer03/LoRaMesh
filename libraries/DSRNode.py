@@ -27,25 +27,19 @@ class DSRNode:
         self.timer = timer
         self.time_pending_rreqs = []
         self.current_time = None
-        self.role = role  # Define el rol del nodo como "master" o "slave"
+        self.role = role 
         self.timer.init(period=1000, mode=Timer.PERIODIC, callback=self.set_timestamp)
         if self.role == "master":
             print(f"Node {self.node_id} is operating as master.")
-            # Lógica específica para el rol de maestro
-            # ...
+
         elif self.role == "slave":
             print(f"Node {self.node_id} is operating as slave.")
-            # Lógica específica para el rol de esclavo
-            # ...
+
 
     def set_timestamp(self, timer):
-        # Obtener la fecha y hora actual del RTC
         rtc_time = self.rtc.datetime()
-        
-        # Crear una tupla para `mktime`: (Año, Mes, Día, Hora, Minuto, Segundo)
-        t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[3], rtc_time[4], rtc_time[5])
-        
-        # Convertir a tiempo Unix y asignarlo a `timestamp_message`
+        # Crear una tupla para `mktime`: (Año, Mes, Día, Hora, Minuto, Segundo, Día de la semana, Día del año, Horario de verano)
+        t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6], 0, 0, 0)
         self.timestamp_message = time.mktime(t)
 
     @property
