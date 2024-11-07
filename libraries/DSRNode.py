@@ -105,7 +105,18 @@ class DSRNode:
         # Tomamos el complemento de uno
         checksum = ~checksum & 0xFFFF
         
-        return checksum
+        return checksum    
+    def verify_checksum(self, message_with_checksum):
+        # Separar el mensaje y el checksum
+        *message_parts, received_checksum = message_with_checksum.rsplit(":", 1)
+        message = ":".join(message_parts)
+        
+        # Calcular el checksum nuevamente
+        calculated_checksum = self.calculate_checksum(message)
+        
+        # Comparar checksums
+        return int(received_checksum) == calculated_checksum
+
 
     def send_hello(self):
         """Envía un mensaje de hello para descubrir vecinos"""
@@ -160,40 +171,43 @@ class DSRNode:
             self.broadcast_rreq(destination)
 
     def waiting_for_response(self, objetive, message):
-        """Espera el ACK (reconocimiento) de un mensaje enviado y reenvía si no lo recibe en el tiempo esperado."""
+        """Espera la respuesta del nodo esclavo y reenvía la solicitud si no lo recibe en el tiempo esperado."""
         attempts = 1
         while self.waiting_response:
-            if self.timestamp_message - int(self.query["DATA"][0][0]) <= 30 and attempts <= self.MAX_ATTEMPTS:
-                
+            if self.timestamp_message - int(self.query["DATA"][0][0]) <= 30 and attempts <= self.MAX_ATTEMPTS:  
                 # Reenvío del mensaje después de 15 segundos
-                if self.timestamp_message - int(self.query["DATA"][0][0]) == 15 and attempts < self.MAX_ATTEMPTS:
+                if self.timestamp_message - int(self.query["DATA"][0][0]) > 15 and attempts < self.MAX_ATTEMPTS:
                     self.lora.send(message)
                     attempts += 1
+                    print(f"{self.node_id} reenviando mensaje de solicitud de datos {self.query['DATA'][0][0]}")
                 
                 # Verificar si se ha recibido un paquete
                 if self.lora.is_packet_received():
-                    message = self.lora.get_packet(rssi=True)
-                    
-                    # Procesar mensaje de ACK si se recibe
-                    if message.get('payload').startswith("ACK"):
-                        sequence, source, destination, data_id, routelist = self.extract_message_data(message)
-                        if destination == self.node_id and data_id == self.query["DATA"][0][0]:
-                            print(f"{self.node_id} recibió ACK para la petición {data_id}")
-                            self.waiting_response = False
+                    message = self.lora.get_packet(rssi=False)
+                    # Procesar mensaje de RESP si se recibe
+                    if message.get('payload').startswith("RESP"):
+                        if self.verify_checksum(message.get('payload')):
+                            sequence, source, destination, data_id, routelist, sensors_data, checksum = message.get('payload').split(":")
+                            if destination == self.node_id and data_id == self.query["DATA"][0][0]:
+                                print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                                self.waiting_response = False
+                            else:
+                                print(f"{self.node_id} recibío una peticion distinta a {self.query['DATA'][0][0]}. Recibiendo la solicitud {data_id}")
+                        else:
+                            print(f"{self.node_id} no recibió un checksum correcto")
+                    else:
+                        print(f"{self.node_id} recibió un mensaje de otro tipo que no es RESP")        
             else:
-                # Si no se recibe ACK, la ruta se considera caída
-                print(f"{self.node_id} no recibió ACK para la petición {self.query['DATA'][0][0]} por lo tanto la ruta está caída")
+                # No se recibió respuesta, ruta caida
+                print(f"{self.node_id} no recibió respuesta para la petición {self.query['DATA'][0][0]} por lo tanto la ruta está caída")
                 self.routes.pop(objetive)
                 self.waiting_response = False
 
     def receive_message(self):
-        """
-        Escucha la red y procesa los mensajes recibidos según el tipo de mensaje (HELLO, RREQ, RREP, DATA).
-        """
+        """Escucha la red y procesa los mensajes recibidos según el tipo de mensaje (HELLO, RREQ, RREP, DATA)."""
         if self.lora.is_packet_received():
             message = self.lora.get_packet(rssi=True)
             print(f"{self.node_id} recibió mensaje: {message}")
-            
             # Procesar diferentes tipos de mensajes
             if message.get('payload').startswith("HELLO"):
                 self.process_hello(message)
@@ -203,6 +217,8 @@ class DSRNode:
                 self.process_rrep(message.get('payload'))
             elif message.get('payload').startswith("DATA"):
                 self.process_data(message)
+            elif message.get('payload').startswith("RESP"):
+                self.process_response(message)
 
     def process_hello(self, message):
         """Procesa un mensaje HELLO recibido y agrega al nodo a la lista de vecinos"""
@@ -320,3 +336,21 @@ class DSRNode:
                     pass
         except Exception as e:
             print(f"Error procesando RREP: {e}")
+
+    def process_response(self, message):
+        """Procesa un mensaje RESP recibido """
+        try:
+            sequence, source, destination, data_id, routelist, sensors, checksum = message.get('payload').split(":")
+            routelist = routelist.split("-")
+            if not destination == self.node_id:
+                if self.node_id in routelist:
+                    if not [data_id, source, destination] in self.query["RESP"]:
+                        self.query["RESP"].append([data_id, source, destination])
+                        self.lora.send(message.get('payload'))
+                        print(f"Nodo de transicion: {self.node_id} reenvía RESP: {message.get('payload')}")
+                    else:
+                        pass             
+                else:
+                    pass
+        except Exception as e:
+            print(f"Error procesando RESP: {e}")
