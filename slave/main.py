@@ -8,14 +8,23 @@ from DSRNode import DSRNode
 spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
 lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
 
-timer = Timer(0)
+tim0 = Timer(0)
 rtc = RTC()
 #rtc.datetime((2024, 11, 7, 17, 14, 0, 0, 0))
 print(rtc.datetime())
 
-nodo = DSRNode("A", lora, rtc, timer, qos=-80, role="slave")
+nodo = DSRNode("A", lora, rtc, tim0, qos=-80, role="slave")
+
+
+def periodico(timer):
+    nodo.broadcast_rreq("B")
+
+tim1 = Timer(1)
+tim1.init(period=10000, mode=Timer.ONE_SHOT, callback=periodico)
 
 while True:
-    print(nodo.timestamp_message)
+    nodo.receive_message()
     time.sleep(1)
+    print(nodo.routes)
+    print(nodo.query)
     
