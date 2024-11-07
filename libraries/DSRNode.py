@@ -52,18 +52,17 @@ class DSRNode:
     def get_routes(self):
         return print(f"Rutas disponibles: {self.routes}")
 
-    def remove_query(self, command, element):
+    def remove_query(self,command, element):
         try:
-            # Filtramos sublistas que contengan el elemento y las eliminamos
+            # Filtrar las sublistas que contienen el elemento y eliminarlas
             initial_len = len(self.query[command])
             self.query[command] = [sublist for sublist in self.query[command] if element not in sublist]
             
             # Verificar si se eliminó alguna sublista
             if len(self.query[command]) < initial_len:
-                print(f"Elemento '{element}' eliminado exitosamente del comando '{command}'.")
+                print(f"La orden con el '{element}' ha sido exitosamente eliminada del comando '{command}'.")
             else:
-                print(f"No se encuentra el query con el elemento '{element}'.")
-                
+                print(f"No se encuentra el self.query con el elemento '{element}'.")
         except KeyError:
             print(f"No existe el comando '{command}' en el diccionario.")
     
