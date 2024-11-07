@@ -9,6 +9,8 @@ class DSRNode:
 
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
         self.neighbors = set()
+        self.neighbors.add("A")
+        self.neighbors.add("B")
         self.rreq_id = 0
         self.query = {
             "RREQ": [],
@@ -228,10 +230,11 @@ class DSRNode:
     def process_rreq(self, message):
         try:
             sequence, source, destination, rreq_id, routelist = self.extract_message_data(message)
-            
             if not routelist:
+                print("Estoy vacia")
                 self.process_empty_routelist(sequence, source, destination, rreq_id)
             else:
+                print("Tengo algo")
                 self.process_non_empty_routelist(sequence, source, destination, rreq_id, routelist)
         
         except Exception as e:
@@ -239,8 +242,8 @@ class DSRNode:
 
     def extract_message_data(self, message):
         """Extrae y descompone los datos del mensaje RREQ."""
-        sequence, source, destination, rreq_id, *route = message.get('payload').split(":")
-        routelist = route[0].split("-") if route else []
+        sequence, source, destination, rreq_id, route = message.get('payload').split(":")
+        routelist = route.split("-") if route else []
         return sequence, source, destination, rreq_id, routelist
 
     def process_empty_routelist(self, sequence, source, destination, rreq_id):
@@ -278,14 +281,12 @@ class DSRNode:
             print(f"Nodo intermedio: {self.node_id} reenvía RREQ: {finalmessage}")
             self.query["RREQ"].append([rreq_id, source, destination])
             self.lora.send(finalmessage)
-
-
     
     def process_rrep(self, message):
         """Procesa un mensaje RREP recibido """
         try:
-            sequence, source, destination, rrep_id, *route = message.split(":")
-            routelist = route[0].split("-")
+            sequence, source, destination, rrep_id, route = message.split(":")
+            routelist = split("-") if route else []
 
             if destination == self.node_id:
                 routelist.reverse()
