@@ -1,24 +1,28 @@
-from DSRNode import DSRNode
 import time
-from machine import SPI, Pin, Timer
+from machine import Pin, Timer, SoftSPI, SoftI2C
 from LoRa import LoRa
+from ssd1306 import SSD1306_I2C
 import json
 
-simulated_unix_time = 203203023
+# Configuración SPI para LoRa
+spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
+lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
 
-def display_time():
-    global simulated_unix_time
-    simulated_unix_time += 1
-
-spi = SPI(1, baudrate=3000000, polarity=0, phase=0, sck=Pin(18), mosi=Pin(23), miso=Pin(19)) 
-lora = LoRa(spi, cs_pin=5, reset_pin=4, dio0_pin=2)
-node = DSRNode("Morty",lora, -100, timestamp = simulated_unix_time)
-
-timer = Timer(0)
-timer.init(period=1000, mode=Timer.PERIODIC, callback=lambda t: display_time())
+# Configuración de la pantalla OLED
+oledSDA = Pin(15, Pin.OUT, Pin.PULL_UP)
+oledSCL = Pin(4, Pin.OUT, Pin.PULL_UP)
+oledRST = Pin(16, Pin.OUT)
+oledRST.value(1)
+i2c = SoftI2C(oledSDA, oledSCL)
+oled = SSD1306_I2C(128, 64, i2c)
 
 while True:
-    node.broadcast_rreq("Pancho")
-    node.receive_message()
-    time.sleep(1)
-    node.set_timestamp(simulated_unix_time)
+    oled.fill(0)  # Limpia la pantalla en cada iteración
+    if lora.is_packet_received():
+        message = lora.get_packet(rssi=False)
+        oled.text("Mensaje Recibido", 0, 10)
+        if len(message) > 0 :
+            oled.text(message.get("payload")[:20], 0, 30)  # Mostrar los primeros 20 caracteres del mensaje
+        print(f"Se recibió el mensaje: {message}")
+        oled.show()  # Refrescar la pantalla para mostrar el mensaje
+    time.sleep(1)  # Pausa para evitar un ciclo continuo demasiado rápido
