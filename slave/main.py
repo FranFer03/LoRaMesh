@@ -17,14 +17,14 @@ nodo = DSRNode("A", lora, rtc, tim0, qos=-80, role="slave")
 
 
 def periodico(timer):
-    nodo.broadcast_rreq("B")
+    nodo.request_data("B")
+    nodo.receive_message()
 
 tim1 = Timer(1)
-tim1.init(period=10000, mode=Timer.ONE_SHOT, callback=periodico)
+tim1.init(period=1000, mode=Timer.ONE_SHOT, callback=periodico)
 
 while True:
+    nodo.waiting_for_response()
     nodo.receive_message()
-    time.sleep(1)
-    print(nodo.routes)
     print(nodo.query)
-    
+    time.sleep(1)
