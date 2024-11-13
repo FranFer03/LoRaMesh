@@ -9,7 +9,7 @@ class DSRNode:
     CACHE_TIMEOUT = 20
 
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
-        self.neighbors = {"A", "B"}
+        self.neighbors = set()
         self.rreq_id = 0
         self.query = {
             "RREQ": [],
@@ -17,7 +17,7 @@ class DSRNode:
             "DATA": [],
             "RESP": []
         }
-        self.routes = {'B': []}
+        self.routes = {}
         self.node_id = node_id
         self.quality_neighbor = qos
         self.lora = lora
@@ -41,14 +41,6 @@ class DSRNode:
         t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6], 0, 0, 0)
         self.timestamp_message = time.mktime(t)
         self.cache_cleaning()
-
-    @property
-    def get_neighbors(self):
-        return print(f"Vecinos proximos: {self.neighbors}")
-    
-    @property
-    def get_routes(self):
-        return print(f"Rutas disponibles: {self.routes}")
 
     def remove_query(self, command, element):
         try:
@@ -98,7 +90,6 @@ class DSRNode:
     def broadcast_rreq(self, destination):
         self.rreq_id = self.timestamp_message
         rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}:"
-        #self.time_pending_rreqs.append(time.time())
         self.query["RREQ"].append([str(self.rreq_id),self.node_id,destination])
         self.lora.send(rreq_message)
 
