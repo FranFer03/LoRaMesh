@@ -112,7 +112,7 @@ class LoRa:
             time.sleep(0.01)
         # Limpia la bandera de TxDone
         self.write_register(self.REG_IRQ_FLAGS, self.IRQ_TX_DONE_MASK)
-        print("Paquete transmitido.")
+        # print("Paquete transmitido.")
         # Volver al modo de recepción continua
         self.set_mode_rx_continuous()
 
@@ -211,7 +211,6 @@ class LoRa:
         time.sleep(0.01)
         self.reset_pin.value(1)
         time.sleep(0.01)
- 
     # Método para verificar si llegó un paquete
     def is_packet_received(self):
         return self.packet_received

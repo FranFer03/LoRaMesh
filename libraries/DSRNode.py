@@ -132,13 +132,15 @@ class DSRNode:
             # Verificar si se ha recibido un paquete
             if self.lora.is_packet_received():
                 message = self.lora.get_packet(rssi=True)
-                print(f"{self.node_id} recibió mensaje: {message}")
+                # print(f"{self.node_id} recibió mensaje: {message}")
                 if message.get('payload').startswith("RESP"):
                     if self.verify_checksum(message.get('payload')):
                         sequence, source, destination, data_id, routelist, sensors_data, checksum = message.get('payload').split(":")
                         if destination == self.node_id and data_id == self.query["DATA"][-1][0]:
-                            print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
-                            self.waiting_response = False
+                            if not [data_id, source, destination] in self.query["RESP"]:
+                                self.query["RESP"].append([data_id, source, destination])
+                                print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                                self.waiting_response = False
                     else:
                         print(f"{self.node_id} no recibió un checksum correcto")
             
@@ -155,7 +157,7 @@ class DSRNode:
         try:
             if self.lora.is_packet_received():
                 message = self.lora.get_packet(rssi=True)
-                print(f"{self.node_id} recibió mensaje: {message}")
+                # print(f"{self.node_id} recibió mensaje: {message}")
                 # Procesar diferentes tipos de mensajes
                 payload = message.get('payload', '')
                 if payload.startswith("HELLO"):
@@ -178,6 +180,7 @@ class DSRNode:
             _, neighbor_id = message.get("payload").split(":")
             if neighbor_id != self.node_id and int(message.get("rssi")) > self.quality_neighbor:
                 if neighbor_id not in self.neighbors:
+                    print(message)
                     self.neighbors.add(neighbor_id)
                     print(f"{self.node_id} descubrió al vecino {neighbor_id}")
         except Exception as e:
@@ -185,6 +188,7 @@ class DSRNode:
     
     def process_rreq(self, message):
         try:
+            print(message)
             sequence, source, destination, rreq_id, routelist = self.extract_message_data(message)
             if not routelist:
                 print("Estoy vacia")
@@ -234,14 +238,16 @@ class DSRNode:
     
     def process_rrep(self, message):
         try:
-            sequence, source, destination, rrep_id, route = message.split(":")
+            print(message)
+            _, source, destination, rrep_id, route = message.split(":")
             routelist = route[0].split("-") if route else []
 
             if destination == self.node_id:
-                routelist.reverse()
-                print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
-                self.routes[source] = routelist
-                self.remove_query("RREQ",rrep_id)
+                if not [rrep_id, source, destination] in self.query["RREP"]:
+                    self.query["RREP"].append([rrep_id, source, destination])
+                    routelist.reverse()
+                    print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
+                    self.routes[source] = routelist
 
             else:
                 # Nodo intermedio, reenviar RREP si no fue procesado ya
@@ -260,14 +266,17 @@ class DSRNode:
     def process_data(self, message):
         """Procesa un mensaje DATA recibido """
         try:
-            sequence, source, destination, data_id, routelist = self.extract_message_data(message)
+            print(message)
+            _, source, destination, data_id, routelist = self.extract_message_data(message)
 
             if destination == self.node_id:
-                ruta = routelist[0].split("-")
-                ruta.reverse()
-                de_ruta = '-'.join(ruta)
-                self.routes[source] = ruta
-                self.send_response(source, data_id, de_ruta)
+                if self.query["DATA"].append([data_id, source, destination]):
+                    self.query["DATA"].append([data_id, source, destination])
+                    ruta = routelist[0].split("-")
+                    ruta.reverse()
+                    de_ruta = '-'.join(ruta)
+                    self.routes[source] = ruta
+                    self.send_response(source, data_id, de_ruta)
 
             else:
                 if self.node_id in routelist:
@@ -285,8 +294,8 @@ class DSRNode:
     def process_response(self, message):
         """Procesa un mensaje RESP recibido """
         try:
-            
-            sequence, source, destination, data_id, routelist, sensors, checksum = message.get('payload').split(":")
+            print(message)
+            _, source, destination, data_id, routelist, sensors, checksum = message.get('payload').split(":")
             routelist = routelist.split("-")
             if not destination == self.node_id:
                 if self.node_id in routelist:
@@ -302,8 +311,10 @@ class DSRNode:
                 if self.verify_checksum(message.get('payload')):
                     sequence, source, destination, data_id, routelist, sensors_data, checksum = message.get('payload').split(":")
                     if destination == self.node_id and data_id == self.query["DATA"][-1][0]:
-                        print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
-                        self.waiting_response = False
+                        if not [data_id, source, destination] in self.query["RESP"]:
+                            self.query["RESP"].append([data_id, source, destination])
+                            print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                            self.waiting_response = False
                 else:
                     print(f"{self.node_id} no recibió un checksum correcto")
         except Exception as e:
