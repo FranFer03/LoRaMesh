@@ -1,5 +1,5 @@
 import time
-from machine import Timer
+from machine import Timer # type: ignore
 import random
 
 class DSRNode:
@@ -75,7 +75,7 @@ class DSRNode:
 
     def send_hello(self):
         hello_message = f"HELLO:{self.node_id}"
-        print(f"{self.node_id} enviando mensaje HELLO")
+        # print(f"{self.node_id} enviando mensaje HELLO")
         self.lora.send(hello_message)
     
     def send_response(self,destination,id_response, routelist):
@@ -93,7 +93,7 @@ class DSRNode:
         self.lora.send(rreq_message)
 
     def send_rrep(self, destination,id_message,routes):
-        print(f"{self.node_id} envia RREP a {destination}: {id_message}: {'-'.join(routes)}")
+        # print(f"{self.node_id} envia RREP a {destination}: {id_message}: {'-'.join(routes)}")
         rrep_message = f"RREP:{self.node_id}:{destination}:{id_message}:{'-'.join(routes)}"
         self.query["RREP"].append([id_message, self.node_id, destination])
         self.lora.send(rrep_message)
@@ -119,15 +119,13 @@ class DSRNode:
             time_elapsed = current_time - self.response_timer
             
             if time_elapsed >= self.RETRY_INTERVAL and self.attempts < self.MAX_ATTEMPTS:
-                # Reenvío del mensaje después de 15 segundos
                 self.response_timer = current_time
                 _, resource, redestination, redata_id, reroutelist = self.sent_message.split(":")
-                self.query["DATA"][0][0] = self.timestamp_message
+                self.query["DATA"][-1][0] = str(self.timestamp_message)
                 data_message = f"DATA:{resource}:{redestination}:{self.timestamp_message}:{'-'.join(self.routes[redestination])}"
-                print(data_message)
                 self.lora.send(data_message)
                 self.attempts += 1
-                print(f"{self.node_id} reenviando mensaje de solicitud de datos {self.query['DATA'][0][0]}")
+                print(f"{self.node_id} reenviando mensaje de solicitud de datos {self.query['DATA'][-1][0]}")
             
             # Verificar si se ha recibido un paquete
             if self.lora.is_packet_received():
@@ -145,13 +143,14 @@ class DSRNode:
                         print(f"{self.node_id} no recibió un checksum correcto")
             
             elif time_elapsed > self.TIMEOUT:
-                print(f"{self.node_id} no recibió respuesta para la petición {self.query['DATA'][0][0]} por lo tanto la ruta está caída")
-                print(self.routes)
+                print(f"{self.node_id} no recibió respuesta para la petición {self.query['DATA'][-1][0]} por lo tanto la ruta está caída")
                 self.waiting_response = False
                 try:
                     self.routes.pop(self.query["DATA"][0][2])
                 except:
                     pass
+                print(self.routes)
+
     def receive_message(self):
         """Escucha la red y procesa los mensajes recibidos según el tipo de mensaje (HELLO, RREQ, RREP, DATA)."""
         try:
@@ -191,10 +190,8 @@ class DSRNode:
             print(message)
             sequence, source, destination, rreq_id, routelist = self.extract_message_data(message)
             if not routelist:
-                print("Estoy vacia")
                 self.process_empty_routelist(sequence, source, destination, rreq_id)
             else:
-                print("Tengo algo")
                 self.process_non_empty_routelist(sequence, source, destination, rreq_id, routelist)
         
         except Exception as e:
@@ -208,7 +205,7 @@ class DSRNode:
     def process_empty_routelist(self, sequence, source, destination, rreq_id):
         if source in self.neighbors:
             if destination == self.node_id:
-                print(f"Ahh...soy yo wey {self.node_id} es el destino, enviando RREP a {source}")
+                print(f"Yo {self.node_id} soy el destino, enviando RREP a {source}")
                 self.send_rrep_with_routelist(source, rreq_id, [])
             else:
                 self.relay_rreq_if_needed(sequence, source, destination, rreq_id, [])
@@ -216,12 +213,12 @@ class DSRNode:
     def process_non_empty_routelist(self, sequence, source, destination, rreq_id, routelist):
         if routelist[-1] in self.neighbors:
             if destination == self.node_id:
-                print(f"Ahh...soy yo wey {self.node_id} es el destino, enviando RREP a {source}")
+                print(f"Yo {self.node_id} soy el destino, enviando RREP a {source}")
                 self.send_rrep_with_routelist(source, rreq_id, routelist)
             else:
                 self.relay_rreq_if_needed(sequence, source, destination, rreq_id, routelist)
         else:
-            print(f"El mensaje RREQ no fue recibido por un vecino")
+            print(f"El mensaje RREQ no fue recibido por una fuente conocida")
 
     def send_rrep_with_routelist(self, source, rreq_id, routelist):
         routelist.reverse()
@@ -232,7 +229,7 @@ class DSRNode:
         if not [rreq_id, source, destination] in self.query["RREQ"]:
             routelist.append(self.node_id)
             finalmessage = f"{sequence}:{source}:{destination}:{rreq_id}:{'-'.join(routelist)}"
-            print(f"Nodo intermedio: {self.node_id} reenvía RREQ: {finalmessage}")
+            # print(f"Nodo intermedio: {self.node_id} reenvía RREQ: {finalmessage}")
             self.query["RREQ"].append([rreq_id, source, destination])
             self.lora.send(finalmessage)
     
@@ -246,7 +243,7 @@ class DSRNode:
                 if not [rrep_id, source, destination] in self.query["RREP"]:
                     self.query["RREP"].append([rrep_id, source, destination])
                     routelist.reverse()
-                    print(f"Volvistee wey. La ruta hacia {source} es {routelist}")
+                    print(f"Mensaje recibido de la petición {rrep_id}. La ruta hacia {source} es {routelist}")
                     self.routes[source] = routelist
 
             else:
@@ -268,7 +265,6 @@ class DSRNode:
         try:
             print(message)
             _, source, destination, data_id, *routelist = message.get('payload').split(':')
-            print(routelist)
             if destination == self.node_id:
                 if not [data_id, source, destination] in self.query["DATA"]:
                     self.query["DATA"].append([data_id, source, destination])
@@ -276,8 +272,8 @@ class DSRNode:
                     ruta.reverse()
                     de_ruta = '-'.join(ruta)
                     self.routes[source] = ruta
-                    print('Tengo que enviar los datos')
                     self.send_response(source, data_id, de_ruta)
+
             else:
                 if self.node_id in routelist:
                     if not [data_id, source, destination] in self.query["DATA"]:
@@ -289,12 +285,11 @@ class DSRNode:
                 else:
                     pass
         except Exception as e:
-            print(f"Error procesando DATA: {e}")
+            print(f"Error procesando RREP: {e}")
 
     def process_response(self, message):
         """Procesa un mensaje RESP recibido """
         try:
-            print(message)
             _, source, destination, data_id, routelist, sensors, checksum = message.get('payload').split(":")
             routelist = routelist.split("-")
             if not destination == self.node_id:
