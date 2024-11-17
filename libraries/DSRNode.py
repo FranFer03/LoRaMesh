@@ -4,9 +4,9 @@ import random
 
 class DSRNode:
     MAX_ATTEMPTS = 2
-    RETRY_INTERVAL = 5
-    TIMEOUT = 10
-    CACHE_TIMEOUT = 20
+    RETRY_INTERVAL = 30
+    TIMEOUT = 60
+    CACHE_TIMEOUT = 180
 
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
         self.neighbors = set()
@@ -74,7 +74,6 @@ class DSRNode:
         return int(received_checksum) == self.calculate_checksum(message)
 
     def send_hello(self):
-        self.neighbors = set()
         hello_message = f"HELLO:{self.node_id}"
         print(f"{self.node_id} enviando mensaje HELLO")
         self.lora.send(hello_message)
@@ -122,7 +121,11 @@ class DSRNode:
             if time_elapsed >= self.RETRY_INTERVAL and self.attempts < self.MAX_ATTEMPTS:
                 # Reenvío del mensaje después de 15 segundos
                 self.response_timer = current_time
-                self.lora.send(self.sent_message)
+                _, resource, redestination, redata_id, reroutelist = self.sent_message.split(":")
+                self.query["DATA"][0][0] = self.timestamp_message
+                data_message = f"DATA:{resource}:{redestination}:{self.timestamp_message}:{'-'.join(self.routes[redestination])}"
+                print(data_message)
+                self.lora.send(data_message)
                 self.attempts += 1
                 print(f"{self.node_id} reenviando mensaje de solicitud de datos {self.query['DATA'][0][0]}")
             
@@ -133,7 +136,7 @@ class DSRNode:
                 if message.get('payload').startswith("RESP"):
                     if self.verify_checksum(message.get('payload')):
                         sequence, source, destination, data_id, routelist, sensors_data, checksum = message.get('payload').split(":")
-                        if destination == self.node_id and data_id == self.query["DATA"][0][0]:
+                        if destination == self.node_id and data_id == self.query["DATA"][-1][0]:
                             print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
                             self.waiting_response = False
                     else:
@@ -232,7 +235,7 @@ class DSRNode:
     def process_rrep(self, message):
         try:
             sequence, source, destination, rrep_id, route = message.split(":")
-            routelist = split("-") if route else []
+            routelist = route[0].split("-") if route else []
 
             if destination == self.node_id:
                 routelist.reverse()
@@ -260,9 +263,11 @@ class DSRNode:
             sequence, source, destination, data_id, routelist = self.extract_message_data(message)
 
             if destination == self.node_id:
-                routelist.reverse()
-                self.routes[source] = routelist
-                self.send_response(source, data_id, routelist)
+                ruta = routelist[0].split("-")
+                ruta.reverse()
+                de_ruta = '-'.join(ruta)
+                self.routes[source] = ruta
+                self.send_response(source, data_id, de_ruta)
 
             else:
                 if self.node_id in routelist:
@@ -280,6 +285,7 @@ class DSRNode:
     def process_response(self, message):
         """Procesa un mensaje RESP recibido """
         try:
+            
             sequence, source, destination, data_id, routelist, sensors, checksum = message.get('payload').split(":")
             routelist = routelist.split("-")
             if not destination == self.node_id:
@@ -293,6 +299,12 @@ class DSRNode:
                 else:
                     pass
             elif destination == self.node_id:
-                self.waiting_for_response()
+                if self.verify_checksum(message.get('payload')):
+                    sequence, source, destination, data_id, routelist, sensors_data, checksum = message.get('payload').split(":")
+                    if destination == self.node_id and data_id == self.query["DATA"][-1][0]:
+                        print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                        self.waiting_response = False
+                else:
+                    print(f"{self.node_id} no recibió un checksum correcto")
         except Exception as e:
             print(f"Error procesando RESP: {e}")
