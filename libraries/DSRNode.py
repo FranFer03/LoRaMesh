@@ -5,7 +5,7 @@ import random
 class DSRNode:
     MAX_ATTEMPTS = 2
     RETRY_INTERVAL = 30
-    TIMEOUT = 60
+    TIMEOUT = 62
     CACHE_TIMEOUT = 180
 
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
