@@ -267,17 +267,17 @@ class DSRNode:
         """Procesa un mensaje DATA recibido """
         try:
             print(message)
-            _, source, destination, data_id, routelist = self.extract_message_data(message)
-
+            _, source, destination, data_id, *routelist = message.get('payload').split(':')
+            print(routelist)
             if destination == self.node_id:
-                if self.query["DATA"].append([data_id, source, destination]):
+                if not [data_id, source, destination] in self.query["DATA"]:
                     self.query["DATA"].append([data_id, source, destination])
                     ruta = routelist[0].split("-")
                     ruta.reverse()
                     de_ruta = '-'.join(ruta)
                     self.routes[source] = ruta
+                    print('Tengo que enviar los datos')
                     self.send_response(source, data_id, de_ruta)
-
             else:
                 if self.node_id in routelist:
                     if not [data_id, source, destination] in self.query["DATA"]:
@@ -289,7 +289,7 @@ class DSRNode:
                 else:
                     pass
         except Exception as e:
-            print(f"Error procesando RREP: {e}")
+            print(f"Error procesando DATA: {e}")
 
     def process_response(self, message):
         """Procesa un mensaje RESP recibido """
