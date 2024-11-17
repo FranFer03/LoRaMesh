@@ -218,7 +218,8 @@ class DSRNode:
             else:
                 self.relay_rreq_if_needed(sequence, source, destination, rreq_id, routelist)
         else:
-            print(f"El mensaje RREQ no fue recibido por una fuente conocida")
+            pass
+            # print(f"El mensaje RREQ no fue recibido por una fuente conocida")
 
     def send_rrep_with_routelist(self, source, rreq_id, routelist):
         routelist.reverse()
