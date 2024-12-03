@@ -1,5 +1,7 @@
 import time
 from machine import Timer # type: ignore
+from umqtt.simple import MQTTClient
+ 
 
 class DSRNode:
     MAX_ATTEMPTS = 2
@@ -7,7 +9,7 @@ class DSRNode:
     TIMEOUT = 62
     CACHE_TIMEOUT = 180
 
-    def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
+    def __init__(self, node_id, lora, rtc, timer, client, topic, qos=-80):
         self.neighbors = set()
         self.rreq_id = 0
         self.query = {
@@ -21,25 +23,42 @@ class DSRNode:
         self.quality_neighbor = qos
         self.lora = lora
         self.timestamp_message = 0
+        self.client = client
+        self.topic = topic
         self.rtc = rtc
         self.timer = timer
-        self.role = role
         self.waiting_response = False
         self.response_timer = 0
         self.attempts = 0
         self.sent_message = None
-        self.sensors = []
+        self.sensors = ''
         self.timer.init(period=1000, mode=Timer.PERIODIC, callback=self.set_timestamp)
-
-        print(f"Node {self.node_id} is operating as {self.role}.")
 
 
     def set_timestamp(self, timer):
         rtc_time = self.rtc.datetime()
-        t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6], 0, 0, 0)
-        self.timestamp_message = time.mktime(t)
+        year, month, day, hour, minute, second = rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6]
+        #print(f"Fecha y hora actual: {year}-{month}-{day} {hour}:{minute}:{second}")
+        self.timestamp_message = self.calculate_days_since_epoch(year, month, day, hour, minute, second)
         self.cache_cleaning()
-        self.update_sensor()
+    
+    def is_leap_year(self,year):
+        return (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
+
+    def days_in_month(self,month, year):
+        days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if month == 2 and self.is_leap_year(year):
+            return 29
+        return days_per_month[month - 1]
+
+    def calculate_days_since_epoch(self,year, month, day, hour, minute, second):
+        days = (year - 1970) * 365 + (year - 1969) // 4 
+        for m in range(1, month):
+            days += self.days_in_month(m, year)
+        days += day - 1
+        total_seconds = days * 86400
+        total_seconds += hour * 3600 + minute * 60 + second
+        return total_seconds
         
     def update_sensor(self,data):
         self.sensors = data
@@ -56,7 +75,7 @@ class DSRNode:
             print(f"No existe el comando '{command}' en el diccionario.")
     
     def cache_cleaning(self):
-        for cmd in ["RREQ", "RREP","DATA","RESP"]:
+        for cmd in ["RREQ","RREP","DATA","RESP"]:
             self.query[cmd] = [i for i in self.query[cmd] if self.timestamp_message - int(i[0]) < self.CACHE_TIMEOUT]
 
     def calculate_checksum(self, message):
@@ -138,6 +157,7 @@ class DSRNode:
                             if not [data_id, source, destination] in self.query["RESP"]:
                                 self.query["RESP"].append([data_id, source, destination])
                                 print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                                self.client.publish(self.topic, sensors_data)
                                 self.waiting_response = False
                     else:
                         print(f"{self.node_id} no recibió un checksum correcto")
@@ -309,6 +329,7 @@ class DSRNode:
                         if not [data_id, source, destination] in self.query["RESP"]:
                             self.query["RESP"].append([data_id, source, destination])
                             print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
+                            self.client.publish(self.topic, sensors_data)
                             self.waiting_response = False
                 else:
                     print(f"{self.node_id} no recibió un checksum correcto")
