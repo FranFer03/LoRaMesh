@@ -1,9 +1,10 @@
 import time 
 from umqtt.simple import MQTTClient
-from machine import Pin, RTC , 
+from machine import Pin,RTC
 import network
 import _thread
 import urequests
+from LoRa import lora
 
 node = "A"
 
@@ -54,7 +55,6 @@ def sync_time():
         sync_time()
         
 
-        
 def is_leap_year(year):
     return (year % 4 == 0 and (year % 100 != 0 or year % 400 == 0))
 
