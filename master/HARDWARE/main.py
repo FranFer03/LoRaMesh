@@ -63,4 +63,3 @@ except Exception as e:
 # Mantener el programa principal en ejecución
 while True:
     time.sleep(1)  # Mantener el bucle principal corriendo para que los hilos sigan activos
-C
