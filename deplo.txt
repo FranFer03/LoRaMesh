@@ -1,0 +1,70 @@
+sudo apt-get update
+sudo apt-get upgrade
+
+sudo ufw app list
+sudo ufw allow OpenSSH
+sudo ufw enable
+sudo ufw status
+
+sudo apt install python3-venv nginx
+git clone https://github.com/Adrian-Cancino/p001crud.git
+python3 -m venv my_env
+source my_env/bin/activate
+pip install django gunicorn
+cd p001crud/
+python manage.py migrate
+python manage.py collectstatic
+python manage.py runserver 0.0.0.0:8000
+sudo nano /etc/systemd/system/gunicorn.socket
+
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+ListenStream=/run/gunicorn.socket
+
+[Install]
+WantedBy=sockets.target
+
+sudo nano /etc/systemd/system/gunicorn.service
+
+[Unit]
+Description= gunicorn daemon
+Requires=gunicorn.socket
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/p001crud
+ExecStart=/home/ubuntu/my_env/bin/gunicorn --access-logfile - --workers 3 --bind unix:/run/gunicorn.sock p001crud.wsgi:.application
+
+[Install]
+WantedBy=multi-user.target
+
+
+sudo systemctl start gunicorn.socket
+sudo systemctl enable gunicorn.socket
+sudo systemctl status gunicorn.socket
+
+sudo nano /etc/nginx/sites-available/djangocrud
+
+
+server {
+    listen 80;
+    server_name 15.228.190.203;
+
+    location /static/ {
+        alias /home/ubuntu/p001crud/static;
+    }
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:/run/gunicorn.socket;
+    }
+}
+
+sudo ln -s /etc/nginx/sites-available/djangocrud  /etc/nginx/sites-enabled
+sudo nginx -t
+sudo systemctl restart nginx
+sudo ufw delete allow 8000
+sudo ufw allow 'Nginx Full'
