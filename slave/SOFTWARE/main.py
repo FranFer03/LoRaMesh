@@ -7,9 +7,19 @@ from LoRa import LoRa # type: ignore
 from DSRNode import DSRNode # type: ignore
 
 # Configuración del módulo GPS
-modulo_gps = UART(1, baudrate=9600, tx=10, rx=9)
+modulo_gps = UART(2, baudrate=9600, rx=16)
 Zona_Horaria = -3
 gps = MicropyGPS(Zona_Horaria)
+
+spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
+lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
+
+tim0 = Timer(0)
+tim1 = Timer(1)
+tim2 = Timer(2)
+rtc = RTC()
+
+nodo = DSRNode("B", lora, rtc, tim0, qos=-80)
 
 # Configuración del sensor de temperatura DS18B20
 ds_pin = Pin(12)  # Pin de datos del sensor de temperatura
@@ -64,21 +74,16 @@ def gps_y_temperatura(timer):
     if longitud is not None or latitud is not None:
         latitud_send = latitud
         longitud_send = longitud
-    msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
-    nodo.update_sensor(msg)
+    try:
+        msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
+    except:
+        msg = str(0)+"/"+str(0)+"/"+str(temp)
+    #nodo.update_sensor(msg)
 
 def hello(timer):
     nodo.send_hello()
 
-spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
-lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
 
-tim0 = Timer(0)
-tim1 = Timer(1)
-tim2 = Timer(2)
-rtc = RTC()
-
-nodo = DSRNode("B", lora, rtc, tim0, qos=-80)
 tim1.init(period=5000, mode=Timer.PERIODIC, callback=hello)
 tim2.init(period=10000, mode=Timer.PERIODIC, callback=gps_y_temperatura)
 
