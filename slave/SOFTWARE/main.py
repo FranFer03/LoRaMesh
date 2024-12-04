@@ -19,7 +19,7 @@ tim1 = Timer(1)
 tim2 = Timer(2)
 rtc = RTC()
 
-nodo = DSRNode("B", lora, rtc, tim0, qos=-80)
+nodo = DSRNode("E", lora, rtc, tim0, qos=-80)
 
 # Configuración del sensor de temperatura DS18B20
 ds_pin = Pin(12)  # Pin de datos del sensor de temperatura
@@ -33,6 +33,10 @@ else:
 # Variables de tiempo
 ultimo_valor = 0
 intervalo_valores = 30
+
+latitud_send = 0
+longitud_send = 0
+
 
 # Función para convertir datos GPS
 def convertir(secciones):
@@ -70,14 +74,15 @@ def gps_y_temperatura(timer):
         for rom in roms:
             temp = ds_sensor.read_temp(rom)
             print(f"DS18B20 -> Temperatura: {temp:.2f} °C")
-    
+    global longitud_send
+    global latitud_send
     if longitud is not None or latitud is not None:
         latitud_send = latitud
         longitud_send = longitud
     try:
         msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
     except:
-        msg = str(0)+"/"+str(0)+"/"+str(temp)
+        pass
     #nodo.update_sensor(msg)
 
 def hello(timer):
