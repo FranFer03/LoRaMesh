@@ -1,11 +1,11 @@
 import time
-from umqtt.simple import MQTTClient
-from machine import Pin, RTC, SPI, Timer
-from DSRNode import DSRNode
-import network
+from umqtt.simple import MQTTClient # type: ignore
+from machine import Pin, RTC, SPI, Timer # type: ignore
+from DSRNode import DSRNode # type: ignore
+import network # type: ignore
 import _thread
-import urequests
-from LoRa import LoRa
+import urequests # type: ignore
+from LoRa import LoRa # type: ignore
 
 
 

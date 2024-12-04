@@ -1,10 +1,10 @@
-from machine import Pin, UART, Timer, RTC, SPI
+from machine import Pin, UART, Timer, RTC, SoftSPI # type: ignore
 import time
-from MicropyGPS import MicropyGPS
-import onewire
-import ds18x20
-from LoRa import LoRa
-from DSRNode import DSRNode
+from MicropyGPS import MicropyGPS # type: ignore
+import onewire # type: ignore
+import ds18x20 # type: ignore
+from LoRa import LoRa # type: ignore
+from DSRNode import DSRNode # type: ignore
 
 # Configuración del módulo GPS
 modulo_gps = UART(1, baudrate=9600, tx=10, rx=9)
@@ -70,8 +70,8 @@ def gps_y_temperatura(timer):
 def hello(timer):
     nodo.send_hello()
 
-spi = SPI(2,baudrate=3000000, polarity=0, phase=0, sck=Pin(18), mosi=Pin(23), miso=Pin(19))
-lora = LoRa(spi, cs_pin=Pin(5), reset_pin=Pin(4), dio0_pin=Pin(2))
+spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
+lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
 
 tim0 = Timer(0)
 tim1 = Timer(1)
