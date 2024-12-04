@@ -50,9 +50,9 @@ def sync_system_time():
             rtc.datetime((year, month, day, 0, hour, minute, second, sub_second))
             print("Hora sincronizada en el RTC.")
         else:
-            print("Error al obtener la hora desde la API.")
+            #print("Error al obtener la hora desde la API.")
+            pass
     except Exception as e:
-        print(f"Error al sincronizar el tiempo: {e}")
         time.sleep(0.5)
         sync_system_time()
 
@@ -109,12 +109,18 @@ def send_periodic_messages():
 
 
 def receive_mqtt_messages():
-    """Recibe mensajes MQTT en un bucle continuo."""
     while True:
         try:
             mqtt_client.check_msg()
         except Exception as e:
-            print(f"Error al recibir mensaje MQTT: {e}")
+            print("Error al recibir mensaje MQTT:", e)
+            try:
+                print("Reconectando al broker MQTT...")
+                mqtt_client.connect()
+                mqtt_client.subscribe(MQTT_NODE)
+                print("Re-suscrito al tema:", MQTT_NODE)
+            except Exception as reconnection_error:
+                print("Error al reconectar al broker MQTT:", reconnection_error)
         time.sleep(0.1)
 
 
@@ -134,7 +140,7 @@ mqtt_client = MQTTClient(
     port=MQTT_PORT,
     user=MQTT_USER,
     password=MQTT_PASSWORD,
-    keepalive=120
+    keepalive=300
 )
 mqtt_client.set_callback(on_mqtt_message)
 
