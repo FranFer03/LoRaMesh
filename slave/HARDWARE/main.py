@@ -64,7 +64,10 @@ def gps_y_temperatura(timer):
     if longitud is not None or latitud is not None:
         latitud_send = latitud
         longitud_send = longitud
-    msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
+    try:
+        msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
+    except:
+        msg = str(0)+"/"+str(0)+"/"+str(temp)
     nodo.update_sensor(msg)
 
 def hello(timer):
