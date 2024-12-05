@@ -19,7 +19,7 @@ tim1 = Timer(1)
 tim2 = Timer(2)
 rtc = RTC()
 
-nodo = DSRNode("E", lora, rtc, tim0, qos=-80)
+nodo = DSRNode("D", lora, rtc, tim0, qos=-80)
 
 # Configuración del sensor de temperatura DS18B20
 ds_pin = Pin(12)  # Pin de datos del sensor de temperatura
