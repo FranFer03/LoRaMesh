@@ -121,8 +121,8 @@ def receive_mqtt_messages():
             try:
                 print("Reconectando al broker MQTT...")
                 mqtt_client.connect()
-                mqtt_client.subscribe(MQTT_NODE)
-                print("Re-suscrito al tema:", MQTT_NODE)
+                mqtt_client.subscribe(MQTT_TOPIC_COMMANDS)
+                print("Re-suscrito al tema:", MQTT_TOPIC_COMMANDS)
             except Exception as reconnection_error:
                 print("Error al reconectar al broker MQTT:", reconnection_error)
         time.sleep(0.1)
@@ -154,7 +154,7 @@ lora = LoRa(spi, cs_pin=Pin(5), reset_pin=Pin(4), dio0_pin=Pin(2))
 rtc = RTC()
 
 # Inicialización de nodos y temporizadores
-dsr_node = DSRNode(NODE_ID, lora, rtc, Timer(1), mqtt_client, MQTT_TOPIC_RESULT, qos=-90)
+dsr_node = DSRNode(NODE_ID, lora, rtc, Timer(1), mqtt_client, MQTT_TOPIC_RESULT, qos=-75)
 neighbor_timer = Timer(0)
 neighbor_timer.init(period=10000, mode=Timer.PERIODIC, callback=send_neighbor_announcement)
 

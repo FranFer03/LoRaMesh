@@ -4,10 +4,10 @@ from umqtt.simple import MQTTClient
  
 
 class DSRNode:
-    MAX_ATTEMPTS = 2
-    RETRY_INTERVAL = 30
-    TIMEOUT = 62
-    CACHE_TIMEOUT = 180
+    MAX_ATTEMPTS = 5
+    RETRY_INTERVAL = 5
+    TIMEOUT = 30
+    CACHE_TIMEOUT = 35
 
     def __init__(self, node_id, lora, rtc, timer, client, topic, qos=-80):
         self.neighbors = set()
@@ -92,7 +92,10 @@ class DSRNode:
     def verify_checksum(self, message_with_checksum):
         *message_parts, received_checksum = message_with_checksum.rsplit(":", 1)
         message = ":".join(message_parts)
-        return int(received_checksum) == self.calculate_checksum(message)
+        try:
+            return int(received_checksum) == self.calculate_checksum(message)
+        except:
+            return False
 
     def send_hello(self):
         hello_message = f"HELLO:{self.node_id}"
@@ -157,7 +160,7 @@ class DSRNode:
                             if not [data_id, source, destination] in self.query["RESP"]:
                                 self.query["RESP"].append([data_id, source, destination])
                                 print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
-                                self.client.publish(self.topic, sensors_data)
+                                self.client.publish(self.topic, message.get('payload'))
                                 self.waiting_response = False
                     else:
                         print(f"{self.node_id} no recibió un checksum correcto")
@@ -329,7 +332,7 @@ class DSRNode:
                         if not [data_id, source, destination] in self.query["RESP"]:
                             self.query["RESP"].append([data_id, source, destination])
                             print(f"{self.node_id} recibió respuesta de la petición {data_id} con los datos {sensors_data}")
-                            self.client.publish(self.topic, sensors_data)
+                            self.client.publish(self.topic, message.get('payload'))
                             self.waiting_response = False
                 else:
                     print(f"{self.node_id} no recibió un checksum correcto")
