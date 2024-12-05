@@ -19,7 +19,7 @@ tim1 = Timer(1)
 tim2 = Timer(2)
 rtc = RTC()
 
-nodo = DSRNode("D", lora, rtc, tim0, qos=-80)
+nodo = DSRNode("C", lora, rtc, tim0, qos=-90)
 
 # Configuración del sensor de temperatura DS18B20
 ds_pin = Pin(12)  # Pin de datos del sensor de temperatura
@@ -34,8 +34,7 @@ else:
 ultimo_valor = 0
 intervalo_valores = 30
 
-latitud_send = 0
-longitud_send = 0
+
 
 
 # Función para convertir datos GPS
@@ -49,6 +48,10 @@ def convertir(secciones):
         data = -data
     return '{0:.6f}'.format(data)  # 6 dígitos decimales
 
+# Inicialización de variables globales
+longitud_send = 0  # Valor por defecto
+latitud_send = 0   # Valor por defecto
+
 # Función para leer datos GPS y temperatura
 def gps_y_temperatura(timer):
     # Lectura del GPS
@@ -59,7 +62,7 @@ def gps_y_temperatura(timer):
             gps.update(chr(x))
     latitud = convertir(gps.latitude)
     longitud = convertir(gps.longitude)
-    print(f"GPS -> Longitud: {longitud}, Latitud: {latitud}")
+    #print(f"GPS -> Longitud: {longitud}, Latitud: {latitud}")
 
     # Configuración de la fecha y hora del RTC
     actual_time = gps.timestamp
@@ -68,33 +71,41 @@ def gps_y_temperatura(timer):
     rtc.datetime((actual_date[2] + 2000, actual_date[1], actual_date[0], 0, actual_time[0], actual_time[1], int(actual_time[2]), 0))
 
     # Lectura del sensor de temperatura
+    temp = None  # Valor por defecto
     if roms:
         ds_sensor.convert_temp()  # Inicia la conversión de temperatura
         time.sleep_ms(750)  # Esperar conversión
         for rom in roms:
             temp = ds_sensor.read_temp(rom)
-            print(f"DS18B20 -> Temperatura: {temp:.2f} °C")
-    global longitud_send
-    global latitud_send
-    if longitud is not None or latitud is not None:
+    
+    # Actualización de las variables globales
+    global longitud_send, latitud_send
+    if latitud is not None:  # Solo actualizar si hay un valor válido
         latitud_send = latitud
+    if longitud is not None:  # Solo actualizar si hay un valor válido
         longitud_send = longitud
-    try:
-        msg = str(longitud_send)+"/"+str(latitud_send)+"/"+str(temp)
-    except:
-        pass
-    #nodo.update_sensor(msg)
+
+    # Creación del mensaje
+    temp_str = str(temp)
+    msg = f"{longitud_send}/{latitud_send}/{temp_str}"
+    print(f"Mensaje: {msg}")
+
+    nodo.update_sensor(msg)
+
 
 def hello(timer):
     nodo.send_hello()
 
 
 tim1.init(period=5000, mode=Timer.PERIODIC, callback=hello)
+
+
 tim2.init(period=10000, mode=Timer.PERIODIC, callback=gps_y_temperatura)
 
 while True:
     nodo.waiting_for_response()
     nodo.receive_message()
     time.sleep(1)
+
 
 
