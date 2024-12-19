@@ -8,13 +8,10 @@ import urequests # type: ignore
 from LoRa import LoRa # type: ignore
 
 
-
-
-
 # Configuración de nodos y red
 NODE_ID = "A"
-WIFI_SSID = "TP-Link_4796"
-WIFI_PASSWORD = "29792245"
+WIFI_SSID = "iPhone de Nahuel"
+WIFI_PASSWORD = "12345678"
 MQTT_BROKER = '15.228.205.212'
 MQTT_PORT = 1883
 MQTT_USER = 'espfran'
