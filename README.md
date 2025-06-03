@@ -29,7 +29,6 @@ En muchas áreas rurales y remotas, las soluciones de comunicación tradicionale
 
 #### 2. **Nodos Maestros** 🖥️
 - **Master API**: Centraliza datos y los envía via WiFi a servidores web
-- **Master MQTT**: Publica datos en broker MQTT para monitoreo en tiempo real
 - **Función**: Gateway entre la red mesh y servicios externos
 
 #### 3. **Protocolo DSR** 🔄
