@@ -1,3 +1,27 @@
+"""
+Red Mesh LoRa - Nodo Esclavo con Sensores
+==========================================
+
+Este módulo implementa un nodo esclavo de la red mesh LoRa que recolecta
+datos ambientales y de geolocalización para enviarlos al nodo maestro.
+
+Características principales:
+- Protocolo DSR (Dynamic Source Routing) para comunicación mesh
+- Sensor de temperatura DS18B20 integrado
+- Módulo GPS para geolocalización
+- Respuesta automática a solicitudes de datos
+- Configuración de hardware optimizada para ESP32
+
+Sensores soportados:
+- DS18B20: Sensor de temperatura digital de alta precisión
+- GPS UART: Módulo GPS para coordenadas geográficas
+
+Autores: Francisco Fernández & Nahuel Ontivero
+Universidad: UTN - Facultad Regional Tucumán
+Fecha: 2024
+Licencia: MIT
+"""
+
 from machine import Pin, UART, Timer, RTC, SoftSPI # type: ignore
 import time
 from MicropyGPS import MicropyGPS # type: ignore
@@ -5,48 +29,82 @@ import onewire # type: ignore
 import ds18x20 # type: ignore
 from LoRa import LoRa # type: ignore
 from DSRNode import DSRNode # type: ignore
+from config import * # Importa todas las constantes de configuración
 
-# Configuración del módulo GPS
-modulo_gps = UART(2, baudrate=9600, rx=16)
-Zona_Horaria = -3
-gps = MicropyGPS(Zona_Horaria)
+# ================================================================
+# CONFIGURACIÓN DE HARDWARE
+# ================================================================
 
-spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, sck=Pin(5), mosi=Pin(27), miso=Pin(19))
-lora = LoRa(spi, cs_pin=Pin(18), reset_pin=Pin(14), dio0_pin=Pin(26))
+# Configuración del módulo GPS usando constantes de config.py
+modulo_gps = UART(GPS_UART_ID, baudrate=GPS_BAUDRATE, rx=GPS_RX_PIN)
+gps = MicropyGPS(GPS_TIMEZONE)
 
-tim0 = Timer(0)
-tim1 = Timer(1)
-tim2 = Timer(2)
+# Configuración SPI para módulo LoRa usando constantes de config.py
+spi = SoftSPI(baudrate=3000000, polarity=0, phase=0, 
+              sck=Pin(SPI_SCK_PIN), mosi=Pin(SPI_MOSI_PIN), miso=Pin(SPI_MISO_PIN))
+lora = LoRa(spi, cs_pin=Pin(LORA_CS_PIN), reset_pin=Pin(LORA_RST_PIN), dio0_pin=Pin(LORA_DIO0_PIN))
+
+# Inicialización de temporizadores y RTC usando constantes de config.py
+tim0 = Timer(TIMER_ID_DSR)      # Timer para DSR
+tim1 = Timer(TIMER_ID_SENSORS)  # Timer para lecturas de sensores
+tim2 = Timer(TIMER_ID_GPS)      # Timer para GPS
 rtc = RTC()
 
-nodo = DSRNode("C", lora, rtc, tim0, qos=-90)
+# Crear nodo DSR usando constantes de config.py
+nodo = DSRNode(NODE_ID, lora, rtc, tim0, qos=LORA_QOS)
 
-# Configuración del sensor de temperatura DS18B20
-ds_pin = Pin(12)  # Pin de datos del sensor de temperatura
+# ================================================================
+# CONFIGURACIÓN DE SENSORES
+# ================================================================
+
+# Configuración del sensor de temperatura DS18B20 usando constantes de config.py
+ds_pin = Pin(DS18B20_PIN)  # Pin de datos del sensor de temperatura
 ds_sensor = ds18x20.DS18X20(onewire.OneWire(ds_pin))
 roms = ds_sensor.scan()  # Detectar sensores conectados
+
 if not roms:
-    print("No se encontró ningún sensor DS18B20.")
+    print("⚠️ No se encontró ningún sensor DS18B20.")
 else:
-    print("Sensores DS18B20 encontrado")
+    print(f"✅ {len(roms)} sensor(es) DS18B20 encontrado(s)")
 
-# Variables de tiempo
-ultimo_valor = 0
-intervalo_valores = 30
+# ================================================================
+# VARIABLES DE CONTROL DE TIEMPO
+# ================================================================
 
+ultimo_valor = 0                              # Timestamp de la última lectura
+intervalo_valores = SENSOR_READ_INTERVAL      # Intervalo entre lecturas (desde config.py)
 
-
-
-# Función para convertir datos GPS
+# ================================================================
+# FUNCIONES AUXILIARES
+# ================================================================
 def convertir(secciones):
+    """
+    Convierte coordenadas GPS desde el formato DMS (grados, minutos, segundos)
+    al formato decimal para facilitar su procesamiento y transmisión.
+    
+    Args:
+        secciones (tuple): Tupla con (grados, minutos, dirección) del GPS
+        
+    Returns:
+        str: Coordenada en formato decimal con 6 dígitos de precisión
+        None: Si no hay datos GPS válidos
+        
+    Example:
+        convertir((25, 30.5, 'S')) -> '-25.508333'
+    """
     if secciones[0] == 0:  # secciones[0] contiene los grados
         return None
+    
+    # Convertir de grados y minutos a decimal
     data = secciones[0] + (secciones[1] / 60.0)  # secciones[1] contiene los minutos
-    if secciones[2] == 'S':
+    
+    # Aplicar signo según la dirección
+    if secciones[2] == 'S':  # Sur
         data = -data
-    if secciones[2] == 'W':
+    if secciones[2] == 'W':  # Oeste
         data = -data
-    return '{0:.6f}'.format(data)  # 6 dígitos decimales
+        
+    return '{0:.6f}'.format(data)  # 6 dígitos decimales de precisión
 
 # Inicialización de variables globales
 longitud_send = 0  # Valor por defecto

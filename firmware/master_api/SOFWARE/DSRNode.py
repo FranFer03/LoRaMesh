@@ -1,43 +1,105 @@
+"""
+DSR Node - Implementación del Protocolo Dynamic Source Routing
+==============================================================
+
+Este módulo implementa el protocolo DSR (Dynamic Source Routing) para redes mesh
+usando tecnología LoRa como medio de transmisión. Incluye funcionalidades para:
+
+- Descubrimiento automático de rutas (RREQ/RREP)
+- Transmisión confiable de datos (DATA/RESP)
+- Mantenimiento de rutas y detección de fallos
+- Gestión de caché y limpieza automática
+- Control de calidad de servicio (QoS)
+
+Autores: Francisco Fernández & Nahuel Ontivero
+Universidad: UTN - Facultad Regional Tucumán
+"""
+
 import time
-from machine import Timer # type: ignore
 import random
+from machine import Timer # type: ignore
+from config import DSR_TIMEOUT, DSR_RETRY_INTERVAL, DSR_MAX_ATTEMPTS, DSR_CACHE_TIMEOUT
 
 class DSRNode:
     """
     Implementa un nodo para una red mesh basada en el protocolo DSR (Dynamic Source Routing)
     usando LoRa como medio de comunicación.
+    
+    El protocolo DSR es un protocolo de enrutamiento reactivo que descubre rutas
+    bajo demanda y mantiene un caché de rutas conocidas. Cada nodo mantiene
+    información sobre rutas hacia otros nodos y puede actuar como reenviador
+    de mensajes.
+    
+    Attributes:
+        MAX_ATTEMPTS (int): Número máximo de reintentos para envío de datos
+        RETRY_INTERVAL (int): Intervalo entre reintentos en segundos
+        TIMEOUT (int): Tiempo máximo de espera para respuestas en segundos
+        CACHE_TIMEOUT (int): Tiempo de vida de entradas en caché en segundos
     """
-    MAX_ATTEMPTS = 2
-    RETRY_INTERVAL = 30
-    TIMEOUT = 62
-    CACHE_TIMEOUT = 180
+      # ================================================================
+    # CONSTANTES DEL PROTOCOLO DSR
+    # ================================================================
+    
+    # Las constantes ahora se importan desde config.py para centralizar configuración
+    MAX_ATTEMPTS = DSR_MAX_ATTEMPTS        # Máximo número de reintentos
+    RETRY_INTERVAL = DSR_RETRY_INTERVAL    # Intervalo entre reintentos (segundos)
+    TIMEOUT = DSR_TIMEOUT                  # Timeout para respuestas (segundos)
+    CACHE_TIMEOUT = DSR_CACHE_TIMEOUT      # Tiempo de vida del caché (segundos)
 
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
         """
         Inicializa el nodo DSR con los parámetros necesarios.
+        
+        Args:
+            node_id (str/int): Identificador único del nodo en la red
+            lora (LoRa): Instancia del módulo LoRa para comunicación
+            rtc (RTC): Reloj de tiempo real para timestamps
+            timer (Timer): Temporizador para operaciones periódicas
+            qos (int, optional): Umbral RSSI para calidad de señal. Defaults to -80.
+            role (str, optional): Rol del nodo ("master" o "slave"). Defaults to "slave".
+        
+        Note:
+            El node_id debe ser único en toda la red mesh para evitar conflictos
+            de enrutamiento. Se recomienda usar valores alfanuméricos cortos.
         """
-        self.neighbors = set()
-        self.rreq_id = 0
+        # ================================================================
+        # ESTRUCTURAS DE DATOS PRINCIPALES
+        # ================================================================
+        
+        self.neighbors = set()          # Conjunto de nodos vecinos detectados
+        self.rreq_id = 0               # ID incremental para solicitudes RREQ
+        self.routes = {}               # Tabla de enrutamiento: {destino: [ruta]}
+        
+        # Caché de mensajes procesados para evitar duplicados
         self.query = {
-            "RREQ": [],
-            "RREP": [],
-            "DATA": [],
-            "RESP": []
+            "RREQ": [],  # Route Requests procesados: [id, source, dest]
+            "RREP": [],  # Route Replies procesados: [id, source, dest]  
+            "DATA": [],  # Data messages procesados: [id, source, dest]
+            "RESP": []   # Response messages procesados: [id, source, dest]
         }
-        self.routes = {}
-        self.node_id = node_id
-        self.quality_neighbor = qos
-        self.lora = lora
-        self.timestamp_message = 0
-        self.rtc = rtc
-        self.timer = timer
-        self.role = role
-        self.waiting_response = False
-        self.response_timer = 0
-        self.attempts = 0
-        self.sent_message = None
+        
+        # ================================================================
+        # CONFIGURACIÓN DEL NODO
+        # ================================================================
+        
+        self.node_id = node_id                # ID único del nodo
+        self.quality_neighbor = qos           # Umbral RSSI para vecinos
+        self.lora = lora                     # Instancia LoRa
+        self.rtc = rtc                       # Reloj tiempo real
+        self.timer = timer                   # Temporizador
+        self.role = role                     # Rol en la red
+        
+        # ================================================================
+        # CONTROL DE RESPUESTAS Y REINTENTOS
+        # ================================================================
+        
+        self.waiting_response = False         # Flag: esperando respuesta
+        self.response_timer = 0              # Timer para control de timeout
+        self.attempts = 0                    # Contador de intentos actuales
+        self.sent_message = None             # Último mensaje enviado (para reintento)
+        self.timestamp_message = 0           # Timestamp actual del nodo
 
-        # Inicializa el temporizador para actualizar el timestamp y limpiar la caché periódicamente
+        # Inicializa el temporizador para actualizar timestamp y limpiar caché
         self.timer.init(period=1000, mode=Timer.PERIODIC, callback=self.set_timestamp)
 
         print(f"Node {self.node_id} is operating as {self.role}.")
@@ -45,107 +107,303 @@ class DSRNode:
     def set_timestamp(self, timer):
         """
         Actualiza el timestamp del nodo usando el RTC y limpia la caché de mensajes antiguos.
+        
+        Esta función es llamada periódicamente por el temporizador para:
+        - Mantener sincronizado el timestamp interno
+        - Limpiar mensajes antiguos del caché
+        - Proveer timestamps únicos para nuevos mensajes
+        
+        Args:
+            timer: Objeto Timer que ejecuta esta función (callback)
         """
-        rtc_time = self.rtc.datetime()
-        t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6], 0, 0, 0)
-        self.timestamp_message = time.mktime(t)
-        self.cache_cleaning()
+        try:
+            rtc_time = self.rtc.datetime()
+            # Convertir tiempo RTC a timestamp Unix
+            t = (rtc_time[0], rtc_time[1], rtc_time[2], rtc_time[4], rtc_time[5], rtc_time[6], 0, 0, 0)
+            self.timestamp_message = time.mktime(t)
+            
+            # Limpiar caché de mensajes antiguos
+            self.cache_cleaning()
+        except Exception as e:
+            print(f"Error en set_timestamp: {e}")
 
     def remove_query(self, command, element):
         """
-        Elimina un elemento de la lista de consultas (query) para un comando específico.
+        Elimina un elemento específico de la lista de consultas (query) para un comando dado.
+        
+        Útil para limpiar manualmente entradas específicas del caché cuando se detectan
+        inconsistencias o para forzar el reprocesamiento de ciertos mensajes.
+        
+        Args:
+            command (str): Comando del cual eliminar ("RREQ", "RREP", "DATA", "RESP")
+            element: Elemento a buscar y eliminar de la lista
+            
+        Example:
+            remove_query("RREQ", "12345")  # Elimina RREQ con ID 12345
         """
         try:
             initial_len = len(self.query[command])
             self.query[command] = [sublist for sublist in self.query[command] if element not in sublist]
+            
             if len(self.query[command]) < initial_len:
-                print(f"La orden con el '{element}' ha sido eliminada del comando '{command}'.")
+                print(f"✓ Elemento '{element}' eliminado del comando '{command}'")
             else:
-                print(f"No se encuentra el elemento '{element}' en el comando '{command}'.")
+                print(f"⚠ Elemento '{element}' no encontrado en comando '{command}'")
         except KeyError:
-            print(f"No existe el comando '{command}' en el diccionario.")
+            print(f"✗ Comando '{command}' no existe en el diccionario")
+        except Exception as e:
+            print(f"✗ Error eliminando elemento: {e}")
     
     def cache_cleaning(self):
         """
         Elimina mensajes antiguos de la caché según el tiempo de expiración definido.
+        
+        Esta función es esencial para:
+        - Evitar que la memoria se llene con mensajes antiguos
+        - Permitir reprocesamiento de rutas que pueden haber cambiado
+        - Mantener la eficiencia del sistema
+        
+        Los mensajes más antiguos que CACHE_TIMEOUT segundos son eliminados.
         """
-        for cmd in ["RREQ", "RREP", "DATA", "RESP"]:
-            self.query[cmd] = [i for i in self.query[cmd] if self.timestamp_message - int(i[0]) < self.CACHE_TIMEOUT]
+        try:
+            current_time = self.timestamp_message
+            for cmd in ["RREQ", "RREP", "DATA", "RESP"]:
+                original_count = len(self.query[cmd])
+                self.query[cmd] = [
+                    entry for entry in self.query[cmd] 
+                    if current_time - int(entry[0]) < self.CACHE_TIMEOUT
+                ]
+                cleaned_count = original_count - len(self.query[cmd])
+                if cleaned_count > 0:
+                    print(f"🧹 Limpiadas {cleaned_count} entradas antiguas de {cmd}")
+        except Exception as e:
+            print(f"✗ Error en limpieza de caché: {e}")
 
     def calculate_checksum(self, message):
         """
         Calcula un checksum simple para verificar la integridad de los mensajes.
+        
+        Implementa un algoritmo de suma de verificación de 16 bits que:
+        - Procesa el mensaje en pares de bytes
+        - Acumula la suma con manejo de overflow
+        - Retorna el complemento a uno del resultado
+        
+        Args:
+            message (str): Mensaje para el cual calcular checksum
+            
+        Returns:
+            int: Checksum de 16 bits del mensaje
+            
+        Note:
+            Este checksum detecta errores de transmisión básicos pero no
+            es criptográficamente seguro.
         """
-        message_bytes = message.encode('utf-8')
-        checksum = 0
-        for i in range(0, len(message_bytes), 2):
-            word = message_bytes[i]
-            if i + 1 < len(message_bytes):
-                word = (word << 8) + message_bytes[i + 1]
-            checksum += word
-            checksum = (checksum & 0xFFFF) + (checksum >> 16)
-        return ~checksum & 0xFFFF
+        try:
+            message_bytes = message.encode('utf-8')
+            checksum = 0
+            
+            # Procesar en pares de bytes
+            for i in range(0, len(message_bytes), 2):
+                word = message_bytes[i]
+                if i + 1 < len(message_bytes):
+                    word = (word << 8) + message_bytes[i + 1]
+                
+                checksum += word
+                # Manejar overflow de 16 bits
+                checksum = (checksum & 0xFFFF) + (checksum >> 16)
+            
+            # Retornar complemento a uno
+            return ~checksum & 0xFFFF
+        except Exception as e:
+            print(f"✗ Error calculando checksum: {e}")
+            return 0
 
     def verify_checksum(self, message_with_checksum):
         """
         Verifica que el checksum de un mensaje recibido sea correcto.
+        
+        Separa el mensaje del checksum, recalcula el checksum del mensaje
+        y lo compara con el recibido para verificar integridad.
+        
+        Args:
+            message_with_checksum (str): Mensaje con checksum al final (formato: "mensaje:checksum")
+            
+        Returns:
+            bool: True si el checksum es válido, False en caso contrario
+            
+        Example:
+            verify_checksum("RESP:A:B:123:ruta:datos:45678")  # True si checksum válido
         """
-        *message_parts, received_checksum = message_with_checksum.rsplit(":", 1)
-        message = ":".join(message_parts)
-        return int(received_checksum) == self.calculate_checksum(message)
+        try:
+            # Separar mensaje y checksum
+            *message_parts, received_checksum = message_with_checksum.rsplit(":", 1)
+            message = ":".join(message_parts)
+            
+            # Calcular checksum esperado
+            calculated_checksum = self.calculate_checksum(message)
+            
+            # Comparar checksums
+            return int(received_checksum) == calculated_checksum
+        except Exception as e:
+            print(f"✗ Error verificando checksum: {e}")
+            return False
 
     def send_hello(self):
         """
         Envía un mensaje HELLO para anunciar la presencia del nodo a sus vecinos.
+        
+        Los mensajes HELLO son la base del descubrimiento de vecinos en DSR:
+        - Se envían periódicamente
+        - Permiten que otros nodos detecten este nodo como vecino
+        - No requieren respuesta (broadcast unidireccional)
+        
+        Format: "HELLO:{node_id}"
         """
-        hello_message = f"HELLO:{self.node_id}"
-        self.lora.send(hello_message)
+        try:
+            hello_message = f"HELLO:{self.node_id}"
+            self.lora.send(hello_message)
+            print(f"📡 HELLO enviado desde nodo {self.node_id}")
+        except Exception as e:
+            print(f"✗ Error enviando HELLO: {e}")
     
     def send_response(self, destination, id_response, routelist):
         """
         Envía una respuesta RESP con datos simulados de sensores.
+        
+        Esta función genera datos simulados de sensores y los envía como respuesta
+        a una solicitud DATA. En una implementación real, aquí se leerían
+        sensores reales conectados al nodo.
+        
+        Args:
+            destination (str): Nodo destino de la respuesta
+            id_response (str): ID de la solicitud original (para correlación)
+            routelist (str): Ruta a seguir para llegar al destino
+            
+        Format: "RESP:{source}:{dest}:{id}:{route}:{sensor_data}:{checksum}"
         """
-        temp = random.uniform(50, 100)
-        humidity = random.uniform(0, 100)
-        data_message_raw = f"RESP:{self.node_id}:{destination}:{id_response}:{routelist}:{temp},{humidity}"
-        checksum = self.calculate_checksum(data_message_raw)
-        data_message = f"{data_message_raw}:{checksum}"
-        self.lora.send(data_message)
+        try:
+            # Generar datos simulados de sensores
+            temp = round(random.uniform(15.0, 35.0), 1)      # Temperatura 15-35°C
+            humidity = round(random.uniform(30.0, 90.0), 1)   # Humedad 30-90%
+            
+            # Construir mensaje sin checksum
+            data_message_raw = f"RESP:{self.node_id}:{destination}:{id_response}:{routelist}:{temp},{humidity}"
+            
+            # Calcular y agregar checksum
+            checksum = self.calculate_checksum(data_message_raw)
+            data_message = f"{data_message_raw}:{checksum}"
+            
+            # Enviar respuesta
+            self.lora.send(data_message)
+            print(f"📤 RESP enviado a {destination}: temp={temp}°C, hum={humidity}%")
+        except Exception as e:
+            print(f"✗ Error enviando respuesta: {e}")
 
     def broadcast_rreq(self, destination):
         """
         Difunde un mensaje RREQ para descubrir rutas hacia un destino.
+        
+        Este es el mecanismo principal de descubrimiento de rutas en DSR:
+        - Crea un RREQ único con timestamp como ID
+        - Lo difunde a todos los vecinos
+        - Cada nodo intermedio agregará su ID a la ruta
+        - El destino responderá con RREP
+        
+        Args:
+            destination (str): Nodo destino para el cual buscar ruta
+            
+        Format: "RREQ:{source}:{dest}:{rreq_id}:{route}"
         """
-        self.rreq_id = self.timestamp_message
-        rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}:"
-        self.query["RREQ"].append([str(self.rreq_id), self.node_id, destination])
-        self.lora.send(rreq_message)
+        try:
+            # Usar timestamp como ID único para la solicitud
+            self.rreq_id = self.timestamp_message
+            
+            # Crear mensaje RREQ inicial (ruta vacía)
+            rreq_message = f"RREQ:{self.node_id}:{destination}:{self.rreq_id}:"
+            
+            # Registrar en caché para evitar reprocessar
+            self.query["RREQ"].append([str(self.rreq_id), self.node_id, destination])
+            
+            # Enviar broadcast
+            self.lora.send(rreq_message)
+            print(f"🔍 RREQ broadcast para destino {destination} (ID: {self.rreq_id})")
+        except Exception as e:
+            print(f"✗ Error enviando RREQ: {e}")
 
     def send_rrep(self, destination, id_message, routes):
         """
         Envía un mensaje RREP con la ruta descubierta hacia el destino.
+        
+        Los mensajes RREP son la respuesta a los RREQ y contienen:
+        - La ruta completa desde el origen hasta el destino
+        - El ID de la solicitud original (para correlación)
+        - Se envían usando la ruta inversa del RREQ
+        
+        Args:
+            destination (str): Nodo que inició la búsqueda de ruta
+            id_message (str): ID del RREQ original
+            routes (list): Lista de nodos que forman la ruta
+            
+        Format: "RREP:{source}:{dest}:{id}:{route}"
         """
-        rrep_message = f"RREP:{self.node_id}:{destination}:{id_message}:{'-'.join(routes)}"
-        self.query["RREP"].append([id_message, self.node_id, destination])
-        self.lora.send(rrep_message)
+        try:
+            # Construir mensaje RREP
+            rrep_message = f"RREP:{self.node_id}:{destination}:{id_message}:{'-'.join(routes)}"
+            
+            # Registrar en caché
+            self.query["RREP"].append([id_message, self.node_id, destination])
+            
+            # Enviar RREP
+            self.lora.send(rrep_message)
+            print(f"↩️ RREP enviado a {destination} con ruta: {routes}")
+        except Exception as e:
+            print(f"✗ Error enviando RREP: {e}")
     
     def request_data(self, destination):
         """
         Solicita datos a un nodo destino usando la ruta conocida.
-        Si no hay ruta, inicia el descubrimiento de ruta.
+        Si no hay ruta disponible, inicia el descubrimiento de ruta.
+        
+        Esta función implementa la lógica principal para solicitar datos:
+        1. Verifica si existe una ruta hacia el destino
+        2. Si existe, envía DATA por esa ruta
+        3. Si no existe, inicia descubrimiento con RREQ
+        4. Configura timers para reintentos y timeouts
+        
+        Args:
+            destination (str): Nodo del cual solicitar datos
+            
+        Note:
+            Después de enviar DATA, el nodo esperará RESP con timeout
         """
-        if destination in self.routes.keys():
-            print(f"{self.node_id} enviando solicitud de datos a {destination} a través de la ruta {self.routes[destination]}")
-            data_message = f"DATA:{self.node_id}:{destination}:{self.timestamp_message}:{'-'.join(self.routes[destination])}"
-            self.query["DATA"].append([str(self.timestamp_message), self.node_id, destination])
-            self.lora.send(data_message)
-            self.waiting_response = True
-            self.response_timer = time.time()
-            self.attempts = 1
-            self.sent_message = data_message
-        else:
-            print(f"{self.node_id} no se puede enviar DATA a {destination} porque no hay ruta disponible.")
-            self.broadcast_rreq(destination)
+        try:
+            if destination in self.routes.keys():
+                # Ruta disponible - enviar solicitud directamente
+                route = self.routes[destination]
+                print(f"📨 Enviando solicitud de datos a {destination} via {route}")
+                
+                # Construir mensaje DATA
+                data_message = f"DATA:{self.node_id}:{destination}:{self.timestamp_message}:{'-'.join(route)}"
+                
+                # Registrar solicitud en caché
+                self.query["DATA"].append([str(self.timestamp_message), self.node_id, destination])
+                
+                # Enviar mensaje
+                self.lora.send(data_message)
+                
+                # Configurar control de respuesta
+                self.waiting_response = True
+                self.response_timer = time.time()
+                self.attempts = 1
+                self.sent_message = data_message
+                
+            else:
+                # No hay ruta - iniciar descubrimiento
+                print(f"🔍 No hay ruta a {destination}, iniciando descubrimiento...")
+                self.broadcast_rreq(destination)
+                
+        except Exception as e:
+            print(f"✗ Error solicitando datos: {e}")
 
     def waiting_for_response(self):
         """

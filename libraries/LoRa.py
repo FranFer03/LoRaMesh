@@ -1,30 +1,83 @@
+"""
+Librería LoRa para ESP32 - Comunicación de Largo Alcance
+========================================================
+
+Esta librería implementa la comunicación LoRa usando el chip SX1276/SX1278
+para crear una interfaz de comunicación de largo alcance y bajo consumo.
+
+Características principales:
+- Interfaz SPI personalizable para ESP32
+- Detección automática de paquetes recibidos via interrupción DIO0
+- Control de potencia de transmisión ajustable
+- Medición de RSSI (Received Signal Strength Indicator)
+- Prevención de duplicados de paquetes
+- Configuración de frecuencia y parámetros de modulación
+
+Registros soportados del SX1276/SX1278:
+- Configuración de frecuencia (433MHz, 868MHz, 915MHz)
+- Configuración de potencia de transmisión
+- Configuración de modulación y codificación
+- Gestión de FIFO y buffers
+
+Autores: Francisco Fernández & Nahuel Ontivero
+Universidad: UTN - Facultad Regional Tucumán
+Basado en: Librería LoRa para SX1276/SX1278
+"""
+
 import time
 from machine import SoftSPI, Pin
 
 class LoRa:
+    """
+    Clase principal para el manejo del módulo LoRa SX1276/SX1278.
+    
+    Proporciona una interfaz de alto nivel para:
+    - Configuración del módulo LoRa
+    - Envío y recepción de paquetes
+    - Medición de calidad de señal (RSSI)
+    - Gestión de interrupciones y buffers
+    
+    Attributes:
+        spi (SoftSPI): Interfaz SPI para comunicación con el módulo
+        cs (Pin): Pin Chip Select para control SPI
+        reset_pin (Pin): Pin de reset del módulo LoRa
+        dio0 (Pin): Pin de interrupción DIO0 para eventos de recepción
+    """
+    
     def __init__(self, spi, cs_pin, reset_pin, dio0_pin):
+        """
+        Inicializa el módulo LoRa con los pines especificados.
+        
+        Args:
+            spi (SoftSPI): Interfaz SPI configurada
+            cs_pin (int): Número del pin Chip Select
+            reset_pin (int): Número del pin de Reset
+            dio0_pin (int): Número del pin DIO0 para interrupciones
+        """
         self.spi = spi
         self.cs = Pin(cs_pin, Pin.OUT)
         self.reset_pin = Pin(reset_pin, Pin.OUT)
         self.dio0 = Pin(dio0_pin, Pin.IN)
         
-        # Configurar la interrupción en DIO0
+        # Configurar la interrupción en DIO0 para detección de paquetes
         self.dio0.irq(trigger=Pin.IRQ_RISING, handler=self._irq_recv)
         
-        # Bandera para indicar si se recibió un paquete
-        self.packet_received = False
-        # Variable para almacenar el contenido del paquete
-        self.received_payload = None
-        # Variable para almacenar el último paquete recibido (para detectar duplicados)
-        self.last_payload = None
-        # Variable para almacenar el RSSI del último paquete
-        self.received_rssi = None
+        # ================================================================
+        # VARIABLES DE CONTROL DE RECEPCIÓN
+        # ================================================================
         
-        # Timestamp para evitar recibir el mismo paquete dos veces
-        self.last_receive_time = 0
-        self.receive_delay = 2  # Retardo entre recepciones para evitar duplicados
+        self.packet_received = False      # Flag: paquete recibido
+        self.received_payload = None      # Contenido del último paquete
+        self.last_payload = None         # Último payload (para detectar duplicados)
+        self.received_rssi = None        # RSSI del último paquete recibido
         
-        # Constantes de registros y modos
+        # Control de tiempo para evitar duplicados
+        self.last_receive_time = 0       # Timestamp de última recepción
+        self.receive_delay = 2           # Retardo mínimo entre recepciones (seg)
+        
+        # ================================================================
+        # REGISTROS Y CONSTANTES DEL SX1276/SX1278
+        # ================================================================
         self.REG_RSSI_VALUE = 0x1A
         self.RSSI_OFFSET = 157
         self.TX_BASE_ADDR = 0x00

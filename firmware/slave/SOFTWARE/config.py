@@ -1,10 +1,10 @@
 """
-Archivo de Configuración - Red Mesh LoRa
-========================================
+Archivo de Configuración - Nodo Esclavo LoRa Mesh
+================================================
 
 Este archivo contiene todas las constantes y parámetros de configuración
-para el nodo maestro de la red mesh LoRa. Modifica estos valores según
-tu configuración de hardware y requerimientos de red.
+para el nodo esclavo de la red mesh LoRa. Modifica estos valores según
+tu configuración de hardware y sensores conectados.
 
 Autores: Francisco Fernández & Nahuel Ontivero
 Universidad: UTN - Facultad Regional Tucumán
@@ -14,14 +14,7 @@ Universidad: UTN - Facultad Regional Tucumán
 # CONFIGURACIÓN DE NODO E IDENTIFICACIÓN
 # ================================================================
 
-NODE_ID = 1  # ID único del nodo en la red mesh (cambiar para cada nodo)
-
-# ================================================================
-# CONFIGURACIÓN DE CONECTIVIDAD WIFI
-# ================================================================
-
-WIFI_SSID = "TU_SSID"          # Nombre de la red WiFi
-WIFI_PASSWORD = "TU_PASSWORD"   # Contraseña de la red WiFi
+NODE_ID = "C"  # ID único del nodo esclavo en la red mesh (cambiar para cada nodo)
 
 # ================================================================
 # CONFIGURACIÓN DEL PROTOCOLO LORA
@@ -30,9 +23,6 @@ WIFI_PASSWORD = "TU_PASSWORD"   # Contraseña de la red WiFi
 # Umbral de calidad de señal (RSSI) para considerar un nodo como vecino
 # Valores típicos: -60 (señal fuerte) a -120 (señal débil)
 LORA_QOS = -90  
-
-# Número máximo de intentos para sincronizar la hora con API externa
-MAX_TIME_SYNC_ATTEMPTS = 5
 
 # ================================================================
 # CONFIGURACIÓN DE PINES GPIO (ESP32)
@@ -49,24 +39,29 @@ LORA_RST_PIN = 14   # Pin de Reset del módulo
 LORA_DIO0_PIN = 26  # Pin de interrupción DIO0
 
 # ================================================================
+# CONFIGURACIÓN DE SENSORES
+# ================================================================
+
+# Pin para sensor de temperatura DS18B20
+DS18B20_PIN = 12    # Pin de datos del sensor de temperatura
+
+# Configuración del módulo GPS
+GPS_UART_ID = 2     # ID del puerto UART para GPS
+GPS_BAUDRATE = 9600 # Velocidad de comunicación del GPS
+GPS_RX_PIN = 16     # Pin RX para recepción de datos GPS
+GPS_TIMEZONE = -3   # Zona horaria (UTC-3 para Argentina)
+
+# ================================================================
 # CONFIGURACIÓN DE TEMPORIZADORES
 # ================================================================
 
 # IDs de temporizadores disponibles en ESP32 (0-3)
-TIMER_ID_LORA = 1      # Temporizador para operaciones DSR
-TIMER_ID_VECINOS = 0   # Temporizador para anuncios de vecinos
+TIMER_ID_DSR = 0        # Temporizador para operaciones DSR
+TIMER_ID_SENSORS = 1    # Temporizador para lecturas de sensores
+TIMER_ID_GPS = 2        # Temporizador para procesamiento GPS
 
-# Intervalo para envío de mensajes HELLO a vecinos (en milisegundos)
-# Valores recomendados: 5000-15000 ms
-PERIODIC_VECINOS_INTERVAL = 10000
-
-# ================================================================
-# CONFIGURACIÓN DE APIs EXTERNAS
-# ================================================================
-
-# URL de la API para sincronización de tiempo (WorldTimeAPI)
-# Cambia la zona horaria según tu ubicación
-API_TIME_URL = "http://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Aires"
+# Intervalo para lecturas de sensores (en segundos)
+SENSOR_READ_INTERVAL = 30
 
 # ================================================================
 # CONFIGURACIÓN AVANZADA DEL PROTOCOLO DSR
@@ -83,3 +78,17 @@ DSR_MAX_ATTEMPTS = 2
 
 # Tiempo de vida de entradas en caché (en segundos)
 DSR_CACHE_TIMEOUT = 180
+
+# ================================================================
+# CONFIGURACIÓN DE DATOS DE SENSORES
+# ================================================================
+
+# Precisión decimal para coordenadas GPS
+GPS_DECIMAL_PRECISION = 6
+
+# Rango de temperaturas esperadas (para validación)
+TEMP_MIN_RANGE = -40.0  # Temperatura mínima esperada (°C)
+TEMP_MAX_RANGE = 85.0   # Temperatura máxima esperada (°C)
+
+# Formato de datos de sensores para transmisión
+SENSOR_DATA_FORMAT = "temp:{temp:.1f},gps_lat:{lat},gps_lon:{lon}"
