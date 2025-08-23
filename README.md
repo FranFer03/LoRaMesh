@@ -11,8 +11,9 @@
 En muchas áreas rurales y remotas, las soluciones de comunicación tradicionales como Wi-Fi o redes de datos móviles enfrentan limitaciones significativas relacionadas con la infraestructura, el alcance y el costo. Este proyecto aborda estas problemáticas mediante el uso de **LoRa** (Long Range) combinado con una **red mesh** basada en el protocolo **DSR** (Dynamic Source Routing).
 
 ### 🎯 Aplicaciones
+
 - 🌱 **Monitoreo ambiental**: Calidad del aire, temperatura, humedad
-- 🌾 **Agricultura inteligente**: Seguimiento de cultivos en grandes extensiones  
+- 🌾 **Agricultura inteligente**: Seguimiento de cultivos en grandes extensiones
 - 🌳 **Gestión de recursos naturales**: Vigilancia en áreas protegidas
 - 🏭 **IoT Industrial**: Sensores distribuidos en plantas de producción
 
@@ -23,15 +24,18 @@ En muchas áreas rurales y remotas, las soluciones de comunicación tradicionale
 ### Componentes Principales
 
 #### 1. **Nodos Esclavos** 📡
+
 - **Hardware**: ESP32 + Módulo LoRa SX1276/SX1278
 - **Sensores**: DS18B20 (temperatura), GPS, sensores ambientales
 - **Función**: Recolectan datos y participan en el enrutamiento mesh
 
 #### 2. **Nodos Maestros** 🖥️
+
 - **Master API**: Centraliza datos y los envía via WiFi a servidores web
 - **Función**: Gateway entre la red mesh y servicios externos
 
 #### 3. **Protocolo DSR** 🔄
+
 - **Descubrimiento de rutas**: RREQ (Route Request) / RREP (Route Reply)
 - **Transmisión de datos**: DATA / RESP con verificación de integridad
 - **Mantenimiento**: Detección automática de rutas caídas y re-enrutamiento
@@ -71,11 +75,12 @@ LoRaMesh/
 ### 1. Preparación del Hardware
 
 #### ESP32 + LoRa (SX1276/SX1278)
+
 ```
 ESP32    | LoRa Module
 ---------|------------
 GPIO5    | SCK
-GPIO27   | MOSI  
+GPIO27   | MOSI
 GPIO19   | MISO
 GPIO18   | CS
 GPIO14   | RST
@@ -85,18 +90,22 @@ GND      | GND
 ```
 
 #### Sensores Adicionales
+
 - **DS18B20**: GPIO12 (temperatura)
 - **GPS**: UART2, RX=GPIO16 (coordenadas)
 
 ### 2. Software
 
 #### Dependencias Python
+
 ```bash
 pip install -r requirements.txt
 ```
 
 #### Configuración de Nodos
+
 Edita `firmware/master_api/SOFWARE/config.py`:
+
 ```python
 # Identificación del nodo
 NODE_ID = 1
@@ -126,11 +135,13 @@ API_TIME_URL = "http://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Ai
 ### 1. Despliegue de la Red
 
 #### Configurar Nodo Maestro
+
 1. Cargar firmware desde `firmware/master_api/SOFWARE/main.py`
 2. Configurar credenciales WiFi en `config.py`
 3. El nodo sincronizará automáticamente el tiempo y comenzará a anunciar su presencia
 
 #### Configurar Nodos Esclavos
+
 1. Cargar firmware desde `firmware/slave/SOFTWARE/main.py`
 2. Asignar ID único a cada nodo
 3. Los nodos comenzarán a descubrir vecinos automáticamente
@@ -138,6 +149,7 @@ API_TIME_URL = "http://worldtimeapi.org/api/timezone/America/Argentina/Buenos_Ai
 ### 2. Protocolo de Comunicación
 
 #### Descubrimiento de Rutas
+
 ```
 Nodo A → RREQ:A:C:12345: → Broadcast
 Nodo B → RREQ:A:C:12345:B → Reenvío
@@ -145,6 +157,7 @@ Nodo C → RREP:C:A:12345:B → Respuesta con ruta
 ```
 
 #### Solicitud de Datos
+
 ```
 Nodo A → DATA:A:C:67890:B → Solicitud via ruta conocida
 Nodo C → RESP:C:A:67890:B:temp=25.3,hum=60.2:CRC → Respuesta con datos
@@ -153,6 +166,7 @@ Nodo C → RESP:C:A:67890:B:temp=25.3,hum=60.2:CRC → Respuesta con datos
 ### 3. Comandos MQTT (Nodo Master MQTT)
 
 Envía comandos al tópico `{NODE_ID}/commands`:
+
 - `VECINOS`: Lista vecinos detectados
 - `CAMINOS`: Muestra tabla de enrutamiento
 - `DESTINO/{ID}`: Descubre ruta hacia nodo ID
@@ -164,6 +178,7 @@ Envía comandos al tópico `{NODE_ID}/commands`:
 ## 📊 Monitoreo y Debugging
 
 ### Logs del Sistema
+
 ```python
 # Ejemplo de salida del nodo maestro
 Conexión Wi-Fi establecida! IP: 192.168.1.100
@@ -174,6 +189,7 @@ Node 1 descubrió al vecino B
 ```
 
 ### Métricas de Red
+
 - **RSSI**: Calidad de señal entre nodos (umbral configurable)
 - **Latencia**: Tiempo de respuesta extremo a extremo
 - **Confiabilidad**: Tasa de entrega exitosa de mensajes
@@ -184,6 +200,7 @@ Node 1 descubrió al vecino B
 ## 🔧 Características Técnicas
 
 ### Protocolo DSR Implementado
+
 - ✅ **Route Discovery**: RREQ/RREP con prevención de loops
 - ✅ **Data Transmission**: DATA/RESP con checksums
 - ✅ **Route Maintenance**: Detección automática de enlaces caídos
@@ -191,6 +208,7 @@ Node 1 descubrió al vecino B
 - ✅ **QoS Support**: Filtrado por calidad de señal (RSSI)
 
 ### Características LoRa
+
 - **Frecuencia**: 915 MHz (configurable)
 - **Potencia**: Hasta +20 dBm
 - **Alcance**: 2-15 km (según condiciones)
@@ -198,6 +216,7 @@ Node 1 descubrió al vecino B
 - **Consumo**: < 50 mA en transmisión
 
 ### Integración de Sensores
+
 - **Temperatura**: DS18B20 (precisión ±0.5°C)
 - **GPS**: Coordenadas con precisión < 5m
 - **Extensible**: Soporte para I2C, SPI, UART
@@ -207,12 +226,14 @@ Node 1 descubrió al vecino B
 ## 🧪 Pruebas y Validación
 
 ### Escenarios de Prueba
+
 1. **Red lineal**: A ↔ B ↔ C ↔ D
 2. **Red en malla**: Múltiples rutas entre nodos
 3. **Pérdida de enlaces**: Recuperación automática
 4. **Escalabilidad**: Hasta 10+ nodos simultáneos
 
 ### Resultados Esperados
+
 - **Latencia promedio**: < 5 segundos
 - **Tasa de entrega**: > 95% en condiciones normales
 - **Tiempo de recuperación**: < 30 segundos ante fallos
@@ -224,6 +245,7 @@ Node 1 descubrió al vecino B
 ### Clases Principales
 
 #### `DSRNode`
+
 ```python
 class DSRNode:
     """
@@ -232,18 +254,19 @@ class DSRNode:
     """
     def __init__(self, node_id, lora, rtc, timer, qos=-80, role="slave"):
         # Inicialización del nodo DSR
-    
+
     def send_hello(self):
         # Envía mensaje HELLO para anunciar presencia
-    
+
     def broadcast_rreq(self, destination):
         # Descubre rutas hacia un destino
-    
+
     def request_data(self, destination):
         # Solicita datos de un nodo específico
 ```
 
 #### `LoRa`
+
 ```python
 class LoRa:
     """
@@ -251,10 +274,10 @@ class LoRa:
     """
     def __init__(self, spi, cs_pin, reset_pin, dio0_pin):
         # Configuración del módulo LoRa
-    
+
     def send(self, message):
         # Transmite un mensaje
-    
+
     def get_packet(self, rssi=False):
         # Recibe un mensaje con información RSSI opcional
 ```
@@ -262,26 +285,31 @@ class LoRa:
 ### Formato de Mensajes
 
 #### HELLO
+
 ```
 HELLO:{node_id}
 ```
 
 #### RREQ (Route Request)
+
 ```
 RREQ:{source}:{destination}:{rreq_id}:{route_list}
 ```
 
 #### RREP (Route Reply)
+
 ```
 RREP:{source}:{destination}:{rreq_id}:{route_list}
 ```
 
 #### DATA
+
 ```
 DATA:{source}:{destination}:{data_id}:{route_list}
 ```
 
 #### RESP (Response)
+
 ```
 RESP:{source}:{destination}:{data_id}:{route_list}:{sensor_data}:{checksum}
 ```
@@ -291,6 +319,7 @@ RESP:{source}:{destination}:{data_id}:{route_list}:{sensor_data}:{checksum}
 ## 🛠️ Desarrollo y Contribución
 
 ### Configuración del Entorno de Desarrollo
+
 ```bash
 # Clonar el repositorio
 git clone https://github.com/tu-usuario/LoRaMesh.git
@@ -306,6 +335,7 @@ pip install -r requirements.txt
 ```
 
 ### Guías de Contribución
+
 1. Fork del repositorio
 2. Crear branch para nueva funcionalidad
 3. Implementar cambios con tests
@@ -319,110 +349,33 @@ pip install -r requirements.txt
 ### Problemas Comunes
 
 #### No se detectan vecinos
+
 - Verificar conexiones SPI y alimentación del módulo LoRa
 - Comprobar que ambos nodos usen la misma frecuencia
 - Ajustar umbral QoS si la señal es débil
 
 #### Rutas no se mantienen
+
 - Verificar sincronización de tiempo entre nodos
 - Ajustar intervalos de timeout en DSRNode
 - Comprobar interferencias en el canal LoRa
 
 #### Errores de checksum
+
 - Verificar integridad de conexiones SPI
 - Comprobar que no hay interferencias electromagnéticas
 - Verificar alimentación estable del ESP32
 
 ---
 
-## 🔮 Roadmap
-
-### Funcionalidades Futuras
-- [ ] **Cifrado de comunicaciones**: AES-256 para seguridad
-- [ ] **Optimización energética**: Modos de bajo consumo
-- [ ] **Dashboard web**: Interfaz gráfica para monitoreo
-- [ ] **Geolocalización**: Integración GPS en tiempo real
-- [ ] **Escalabilidad**: Soporte para >100 nodos
-- [ ] **Machine Learning**: Predicción de fallos de red
-
-### Mejoras de Protocolo
-- [ ] **AODV Implementation**: Protocolo alternativo a DSR
-- [ ] **QoS avanzado**: Priorización de tráfico
-- [ ] **Load balancing**: Distribución automática de carga
-- [ ] **Multicast support**: Comunicación uno-a-muchos
-
----
-
 ## 👨‍🎓 Sobre Nosotros
 
-Somos **dos estudiantes de Ingeniería Electrónica** en la **Universidad Tecnológica Nacional, Facultad Regional Tucumán (UTN FRT)** 🏫. Este proyecto nació como una iniciativa para aplicar nuestras habilidades en áreas como redes de comunicación, sistemas embebidos y desarrollo web, buscando resolver problemas reales en comunidades remotas.
-
-### 👥 Equipo
 **Francisco Fernández**
+
 - 🎓 Estudiante de Ingeniería Electrónica - UTN FRT
 - 💼 [LinkedIn](https://linkedin.com/in/franfer0301)
-- 🔧 Especialización: Sistemas embebidos, LoRa, MicroPython
 
 **Nahuel Ontivero**
-- 🎓 Estudiante de Ingeniería Electrónica - UTN FRT  
+
+- 🎓 Estudiante de Ingeniería Electrónica - UTN FRT
 - 💼 [LinkedIn](https://linkedin.com/in/nahuel-ontivero-5790871b7/)
-- 🔧 Especialización: Redes de comunicación, protocolos mesh
-
----
-
-## 📧 Contacto
-
-¿Tienes preguntas, sugerencias o quieres colaborar?
-
-- 📧 **Email**: [tu-email@dominio.com]
-- 🐛 **Issues**: [GitHub Issues](https://github.com/tu-usuario/LoRaMesh/issues)
-- 💬 **Discusiones**: [GitHub Discussions](https://github.com/tu-usuario/LoRaMesh/discussions)
-
----
-
-## 📜 Licencia
-
-Este proyecto está bajo la **Licencia MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
-
-```
-MIT License
-
-Copyright (c) 2024 Francisco Fernández & Nahuel Ontivero
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
----
-
-## 🙏 Agradecimientos
-
-- **Universidad Tecnológica Nacional - FRT** por el apoyo académico
-- **Comunidad MicroPython** por las herramientas y documentación
-- **Semtech** por la tecnología LoRa que hace posible este proyecto
-- **Comunidad Open Source** por las librerías y herramientas utilizadas
-
----
-
-<div align="center">
-
-**⭐ Si este proyecto te resulta útil, no olvides darle una estrella ⭐**
-
-Made with ❤️ by [Francisco Fernández](https://linkedin.com/in/franfer0301) & [Nahuel Ontivero](https://linkedin.com/in/nahuel-ontivero-5790871b7/)
-
-</div>

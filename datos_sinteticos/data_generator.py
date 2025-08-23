@@ -7,7 +7,7 @@ import random
 import datetime
 import numpy as np
 from typing import Dict
-from config import SensorPattern, SensorPatterns
+from .config import SensorPattern, SensorPatterns, NODE_ID_LOCATIONS
 
 class DataGenerator:
     """Generador de datos sintéticos para sensores IoT"""
@@ -17,6 +17,15 @@ class DataGenerator:
     
     def generate_realistic_value(self, sensor_name: str, timestamp: datetime.datetime, node_id: int) -> float:
         """Genera un valor realista basado en patrones del sensor"""
+        
+        # Para sensores de ubicación, devolver coordenadas fijas del nodo
+        if sensor_name == 'Latitud':
+            lat, lon = NODE_ID_LOCATIONS.get(node_id, (0.0, 0.0))
+            return lat
+        elif sensor_name == 'Longitud':
+            lat, lon = NODE_ID_LOCATIONS.get(node_id, (0.0, 0.0))
+            return lon
+        
         pattern = self.sensor_patterns.get(sensor_name)
         if not pattern:
             return random.uniform(0, 100)
@@ -62,9 +71,8 @@ class DataGenerator:
             'Temperature': (-40, 85),
             'Humidity': (0, 100),
             'Pressure': (300, 1100),
-            'CO2': (0, 5000),
-            'Light': (0, 100000),
-            'Soil_Moisture': (0, 100)
+            'Latitud': (-90, 90),
+            'Longitud': (-180, 180)
         }
         
         if sensor_name in limits:

@@ -8,7 +8,7 @@ from mysql.connector import Error
 import logging
 import random
 from typing import List, Tuple, Dict
-from config import DatabaseConfig, DEVICE_MODELS, SENSOR_TYPES_DATA
+from .config import DatabaseConfig, DEVICE_MODELS, SENSOR_TYPES_DATA, NODE_ID_LOCATIONS
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +29,17 @@ class DatabaseManager:
                 password=self.config.password,
                 port=self.config.port
             )
-            logger.info("✅ Conexión a la base de datos exitosa")
+            logger.info("Conexión a la base de datos exitosa")
             return True
         except Error as e:
-            logger.error(f"❌ Error conectando a MySQL: {e}")
+            logger.error(f"Error conectando a MySQL: {e}")
             return False
     
     def disconnect(self):
         """Desconecta de la base de datos"""
         if self.connection and self.connection.is_connected():
             self.connection.close()
-            logger.info("🔌 Desconectado de la base de datos")
+            logger.info("Desconectado de la base de datos")
     
     def setup_initial_data(self):
         """Configura datos iniciales (nodos y tipos de sensores)"""
@@ -63,17 +63,17 @@ class DatabaseManager:
             """
             
             device_data = [
-                (model, random.randint(30, 300), random.choice(['active', 'active', 'active', 'inactive']))
+                (model, random.randint(1, 10), random.choice(['active', 'active', 'active', 'inactive']))
                 for model in DEVICE_MODELS
             ]
             
             cursor.executemany(devices_query, device_data)
             self.connection.commit()
             
-            logger.info(f"✅ Configuración inicial completada: {len(SENSOR_TYPES_DATA)} tipos de sensores, {len(device_data)} dispositivos")
+            logger.info(f"Configuración inicial completada: {len(SENSOR_TYPES_DATA)} tipos de sensores, {len(device_data)} dispositivos")
             
         except Error as e:
-            logger.error(f"❌ Error en configuración inicial: {e}")
+            logger.error(f"Error en configuración inicial: {e}")
             self.connection.rollback()
         finally:
             cursor.close()
@@ -95,8 +95,34 @@ class DatabaseManager:
             return nodes, sensors
             
         except Error as e:
-            logger.error(f"❌ Error obteniendo datos: {e}")
+            logger.error(f"Error obteniendo datos: {e}")
             return [], []
+    
+    def get_node_with_location(self, node_id: int) -> Dict:
+        """Obtiene información de un nodo incluyendo su ubicación"""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT node_id, model, refresh_rate, status FROM device_nodes WHERE node_id = %s", (node_id,))
+            node_data = cursor.fetchone()
+            cursor.close()
+            
+            if node_data:
+                node_id, model, refresh_rate, status = node_data
+                lat, lon = NODE_ID_LOCATIONS.get(node_id, (0.0, 0.0))
+                
+                return {
+                    'node_id': node_id,
+                    'model': model,
+                    'refresh_rate': refresh_rate,
+                    'status': status,
+                    'latitude': lat,
+                    'longitude': lon
+                }
+            return {}
+            
+        except Error as e:
+            logger.error(f"Error obteniendo nodo {node_id}: {e}")
+            return {}
     
     def insert_measurements_batch(self, measurements_batch: List[Tuple]):
         """Inserta un lote de mediciones"""
@@ -111,37 +137,6 @@ class DatabaseManager:
             self.connection.commit()
             cursor.close()
         except Error as e:
-            logger.error(f"❌ Error insertando mediciones: {e}")
+            logger.error(f"Error insertando mediciones: {e}")
             self.connection.rollback()
             raise
-    
-    def get_database_statistics(self) -> Tuple[Dict, List]:
-        """Obtiene estadísticas de la base de datos"""
-        try:
-            cursor = self.connection.cursor()
-            
-            # Contar registros por tabla
-            tables_stats = {}
-            for table in ['device_nodes', 'sensor_types', 'measurements']:
-                cursor.execute(f"SELECT COUNT(*) FROM {table}")
-                count = cursor.fetchone()[0]
-                tables_stats[table] = count
-            
-            # Estadísticas de mediciones por sensor
-            cursor.execute("""
-                SELECT st.name, COUNT(*) as count, 
-                       MIN(m.timestamp) as first_measurement,
-                       MAX(m.timestamp) as last_measurement
-                FROM measurements m
-                JOIN sensor_types st ON m.sensor_type_id = st.sensor_type_id
-                GROUP BY st.sensor_type_id, st.name
-                ORDER BY count DESC
-            """)
-            sensor_stats = cursor.fetchall()
-            
-            cursor.close()
-            return tables_stats, sensor_stats
-            
-        except Error as e:
-            logger.error(f"❌ Error obteniendo estadísticas: {e}")
-            return {}, []
